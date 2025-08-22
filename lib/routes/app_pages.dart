@@ -52,7 +52,7 @@ class AppPages {
       transitionDuration: const Duration(milliseconds: 300),
     ),
     //Route Transaction
-    GetPage(name: AppRoutes.createTransaction, page: () => CreateTransactionPage(token: ''),
+    GetPage(name: AppRoutes.createTransaction, page: () => CreateTransactionPage(),
       transition: Transition.rightToLeft,
       transitionDuration: const Duration(milliseconds:300)
     )

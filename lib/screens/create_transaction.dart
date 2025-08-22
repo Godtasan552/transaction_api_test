@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:form_validate/services/storage_service.dart';
+import 'package:form_validate/services/universal_storage.dart'; // เปลี่ยนจาก storage_service.dart
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
+import '../controllers/trans_controller.dart';
 
 class CreateTransactionPage extends StatefulWidget {
-  // เอา token parameter ออก เพราะจะดึงจาก StorageService เอง
-  const CreateTransactionPage({super.key, required String token});
+  // ลบ token parameter ออกเพราะจะดึงจาก UniversalStorageService
+  const CreateTransactionPage({super.key});
 
   @override
   State<CreateTransactionPage> createState() => _CreateTransactionPageState();
@@ -17,12 +18,10 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
+  final transactionController = Get.find<TransactionController>();
   int _type = -1; // -1 = expense, 1 = income
   DateTime _selectedDate = DateTime.now();
   bool _loading = false;
-
-  // เพิ่มตัวแปรสำหรับ StorageService
-  late StorageService _storageService;
 
   @override
   void initState() {
@@ -32,11 +31,11 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
 
   Future<void> _initStorageService() async {
     try {
-      _storageService = StorageService();
-      await _storageService.init();
-      debugPrint("StorageService initialized successfully");
+      // ใช้ UniversalStorageService แทน StorageService
+      await UniversalStorageService.init();
+      debugPrint("UniversalStorageService initialized successfully");
     } catch (e) {
-      debugPrint("Failed to initialize StorageService: $e");
+      debugPrint("Failed to initialize UniversalStorageService: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -55,16 +54,16 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
     setState(() => _loading = true);
 
     try {
-      // ใช้ StorageService ที่ init แล้ว
-      final token = _storageService.getToken();
+      // ใช้ UniversalStorageService แบบ static method
+      final token = UniversalStorageService.getToken();
 
       // ตรวจสอบ token
       if (token == null || token.isEmpty) {
         debugPrint("Token is null or empty");
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text("กรุณาเข้าสู่ระบบใหม่")));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("กรุณาเข้าสู่ระบบใหม่")),
+          );
           Get.offAllNamed('/login');
         }
         return;
@@ -73,7 +72,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
       final url = Uri.parse(
         "https://transactions-cs.vercel.app/api/transaction",
       );
-
+      await transactionController.refreshData();
       final body = {
         "name": _nameController.text.trim(),
         "desc": _descController.text.trim(),
@@ -109,26 +108,41 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
 
       if (res.statusCode == 201) {
         debugPrint("Transaction created successfully");
+        
+        // เพิ่มการบันทึก transaction ลง local storage (ถ้าต้องการ)
+        try {
+          final transactionData = {
+            "uuid": DateTime.now().millisecondsSinceEpoch.toString(), // สร้าง uuid ชั่วคราว
+            "wallet": "default",
+            "name": _nameController.text.trim(),
+            "desc": _descController.text.trim(),
+            "amount": int.tryParse(_amountController.text) ?? 0,
+            "type": _type,
+            "date": _selectedDate.toIso8601String(),
+            "createdAt": DateTime.now().toIso8601String(),
+            "updatedAt": DateTime.now().toIso8601String(),
+          };
+          
+          await UniversalStorageService.addTransaction(transactionData);
+          debugPrint("Transaction saved to local storage");
+        } catch (e) {
+          debugPrint("Failed to save transaction to local storage: $e");
+        }
+        
         if (mounted) {
           showDialog(
             context: context,
             builder: (ctx) {
               return AlertDialog(
-                title: const Text("created successfully"),
+                title: const Text("สร้างรายการสำเร็จ"),
                 content: Text(
-                  "Transaction \"${_nameController.text}\" successfully",
+                  "รายการ \"${_nameController.text}\" ถูกสร้างเรียบร้อยแล้ว",
                 ),
                 actions: [
                   TextButton(
                     onPressed: () {
                       Navigator.of(ctx).pop(); // ปิด popup
-                      _nameController.clear();
-                      _descController.clear();
-                      _amountController.clear();
-                      setState(() {
-                        _type = -1;
-                        _selectedDate = DateTime.now();
-                      });
+                      _clearForm();
                     },
                     child: const Text("OK"),
                   ),
@@ -152,11 +166,9 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
         String errorMessage;
         try {
           final data = jsonDecode(res.body);
-          errorMessage =
-              data["message"] ?? "เกิดข้อผิดพลาด (${res.statusCode})";
+          errorMessage = data["message"] ?? "เกิดข้อผิดพลาด (${res.statusCode})";
         } catch (e) {
-          errorMessage =
-              "เกิดข้อผิดพลาด: ${res.statusCode} - ${res.reasonPhrase}";
+          errorMessage = "เกิดข้อผิดพลาด: ${res.statusCode} - ${res.reasonPhrase}";
         }
 
         debugPrint("API Error: $errorMessage");
@@ -186,6 +198,16 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
     }
   }
 
+  void _clearForm() {
+    _nameController.clear();
+    _descController.clear();
+    _amountController.clear();
+    setState(() {
+      _type = -1;
+      _selectedDate = DateTime.now();
+    });
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -211,7 +233,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Create Transaction")),
+      appBar: AppBar(title: const Text("สร้างรายการธุรกรรม")),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -221,62 +243,105 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(
-                  labelText: "Name Transaction",
+                  labelText: "ชื่อรายการ",
+                  border: OutlineInputBorder(),
                 ),
                 validator: (val) => val == null || val.isEmpty
-                    ? "Enter name transaction"
+                    ? "กรุณากรอกชื่อรายการ"
                     : null,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              
               TextFormField(
                 controller: _descController,
-                decoration: const InputDecoration(labelText: "Detail"),
+                decoration: const InputDecoration(
+                  labelText: "รายละเอียด",
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              
               TextFormField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: "Amount"),
+                decoration: const InputDecoration(
+                  labelText: "จำนวนเงิน",
+                  border: OutlineInputBorder(),
+                  suffixText: "บาท",
+                ),
                 validator: (val) {
-                  if (val == null || val.isEmpty) return "please enter amount";
+                  if (val == null || val.isEmpty) return "กรุณากรอกจำนวนเงิน";
                   if (int.tryParse(val) == null) return "จำนวนเงินไม่ถูกต้อง";
+                  if (int.parse(val) <= 0) return "จำนวนเงินต้องมากกว่า 0";
                   return null;
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              
               DropdownButtonFormField<int>(
                 value: _type,
                 decoration: const InputDecoration(
-                  labelText: "Type transaction",
+                  labelText: "ประเภทรายการ",
+                  border: OutlineInputBorder(),
                 ),
                 items: const [
-                  DropdownMenuItem(value: -1, child: Text("Income")),
-                  DropdownMenuItem(value: 1, child: Text("Expenses")),
+                  DropdownMenuItem(value: 1, child: Text("รายรับ")),
+                  DropdownMenuItem(value: -1, child: Text("รายจ่าย")),
                 ],
                 onChanged: (val) {
                   setState(() => _type = val!);
                 },
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      "Date: ${_selectedDate.toLocal()}".split(' ')[0],
+              const SizedBox(height: 16),
+              
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "วันที่",
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        Text(
+                          "${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}",
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ],
                     ),
-                  ),
-                  TextButton(
-                    onPressed: _pickDate,
-                    child: const Text("Select date"),
-                  ),
-                ],
+                    TextButton.icon(
+                      onPressed: _pickDate,
+                      icon: const Icon(Icons.calendar_today),
+                      label: const Text("เลือกวันที่"),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _loading ? null : _createTransaction,
-                child: _loading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text("Save"),
+              const SizedBox(height: 24),
+              
+              SizedBox(
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _createTransaction,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _type == 1 ? Colors.green : Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: _loading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          _type == 1 ? "บันทึกรายรับ" : "บันทึกรายจ่าย",
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                ),
               ),
             ],
           ),

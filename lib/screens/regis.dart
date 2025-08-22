@@ -52,13 +52,49 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _isLoading = true;
     });
 
-    AuthController authController = Get.put(AuthController());
-    authController.register(
-      firstName: _firstNameController.text,
-      lastName: _lastNameController.text,
-      email: _emailController.text,
-      password: _passwordController.text,
-    );
+    try {
+      AuthController authController = Get.put(AuthController());
+      bool registerSuccess = await authController.register(
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (registerSuccess) {
+        // แสดงข้อความสำเร็จ
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: const Text('สมัครสมาชิกสำเร็จ'),
+              content: const Text('บัญชีของคุณถูกสร้างเรียบร้อยแล้ว กรุณาเข้าสู่ระบบ'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    NavigationHelper.toLogin();
+                  },
+                  child: const Text('เข้าสู่ระบบ'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Register error in UI: $e');
+      NavigationHelper.showErrorSnackBar(
+        'เกิดข้อผิดพลาดในการสมัครสมาชิก กรุณาลองใหม่อีกครั้ง',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -105,11 +141,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: const InputDecoration(
                     labelText: 'ชื่อ',
                     prefixIcon: Icon(Icons.person_outlined),
+                    border: OutlineInputBorder(),
                     isDense: true,
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
+                    if (value == null || value.trim().isEmpty) {
                       return 'กรุณากรอกชื่อ';
+                    }
+                    if (value.trim().length < 2) {
+                      return 'ชื่อต้องมีอย่างน้อย 2 ตัวอักษร';
                     }
                     return null;
                   },
@@ -123,11 +163,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: const InputDecoration(
                     labelText: 'นามสกุล',
                     prefixIcon: Icon(Icons.person_outlined),
+                    border: OutlineInputBorder(),
                     isDense: true,
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
+                    if (value == null || value.trim().isEmpty) {
                       return 'กรุณากรอกนามสกุล';
+                    }
+                    if (value.trim().length < 2) {
+                      return 'นามสกุลต้องมีอย่างน้อย 2 ตัวอักษร';
                     }
                     return null;
                   },
@@ -142,13 +186,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: const InputDecoration(
                     labelText: 'อีเมล',
                     prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
                     isDense: true,
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
+                    if (value == null || value.trim().isEmpty) {
                       return 'กรุณากรอกอีเมล';
                     }
-                    if (!value.contains('@') || !value.contains('.')) {
+                    // Simple email validation
+                    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                    if (!emailRegex.hasMatch(value.trim())) {
                       return 'กรุณากรอกอีเมลให้ถูกต้อง';
                     }
                     return null;
@@ -164,6 +211,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: InputDecoration(
                     labelText: 'รหัสผ่าน',
                     prefixIcon: const Icon(Icons.lock_outlined),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -185,6 +233,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value.length < 6) {
                       return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
                     }
+                    if (value.length > 50) {
+                      return 'รหัสผ่านยาวเกินไป';
+                    }
                     return null;
                   },
                 ),
@@ -198,6 +249,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: InputDecoration(
                     labelText: 'ยืนยันรหัสผ่าน',
                     prefixIcon: const Icon(Icons.lock_outlined),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -281,8 +333,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // Register Button
                 SizedBox(
                   width: double.infinity,
+                  height: 50,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _handleRegister,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                     child: _isLoading
                         ? const SizedBox(
                             height: 20,
@@ -294,7 +354,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                             ),
                           )
-                        : const Text('สร้างบัญชี'),
+                        : const Text(
+                            'สร้างบัญชี',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
                   ),
                 ),
 
@@ -309,7 +372,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     TextButton(
-                      onPressed: () => NavigationHelper.back(),
+                      onPressed: () => NavigationHelper.toLogin(),
                       child: const Text('เข้าสู่ระบบ'),
                     ),
                   ],

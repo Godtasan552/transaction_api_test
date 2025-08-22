@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:form_validate/screens/create_transaction.dart';
 import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/trans_controller.dart';
+import '../routes/app_routes.dart';
+import '../routes/app_pages.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -32,44 +35,8 @@ class HomeScreen extends StatelessWidget {
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    UserAccountsDrawerHeader(
-                      accountName: Text(
-                        authController.currentUser?.fullName ?? "ผู้ใช้",
-                        style: const TextStyle(
-                          fontSize: 20, 
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      accountEmail: Text(
-                        authController.currentUser?.email ?? "ไม่มีข้อมูลอีเมล",
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      currentAccountPicture: const CircleAvatar(
-                        backgroundColor: Colors.white,
-                        child: Icon(
-                          Icons.person, 
-                          size: 40, 
-                          color: Colors.blue,
-                        ),
-                      ),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.blue, Colors.blueAccent],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                    ),
-                    
-                    ListTile(
-                      leading: const Icon(Icons.home, color: Colors.blue),
-                      title: const Text("หน้าหลัก"),
-                      onTap: () {
-                        print('🏠 Home menu tapped');
-                        Navigator.pop(context);
-                      },
-                    ),
-                    
+
+
                     ListTile(
                       leading: const Icon(Icons.add, color: Colors.green),
                       title: const Text("สร้างรายการ"),
@@ -129,48 +96,7 @@ class HomeScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Welcome Message Card
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              CircleAvatar(
-                                radius: 40,
-                                backgroundColor: Colors.blue[100],
-                                child: Icon(
-                                  Icons.person,
-                                  size: 48,
-                                  color: Colors.blue[700],
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'สวัสดี ${authController.currentUser?.fullName ?? "ผู้ใช้"}!',
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                authController.currentUser?.email ?? "ไม่มีข้อมูลอีเมล",
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'ยินดีต้อนรับสู่แอปจัดการรายรับรายจ่าย',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+
                       
                       const SizedBox(height: 16),
                       
@@ -260,7 +186,7 @@ class HomeScreen extends StatelessWidget {
                             child: ElevatedButton.icon(
                               onPressed: () {
                                 print('➕ Navigate to create income page');
-                                Get.toNamed('/create', arguments: {'type': 'income'});
+                                Get.to(() =>  CreateTransactionPage());
                               },
                               icon: const Icon(Icons.add_circle, color: Colors.green),
                               label: const Text('เพิ่มรายรับ'),
@@ -397,38 +323,6 @@ class HomeScreen extends StatelessWidget {
                       
                       const SizedBox(height: 24),
                       
-                      // Debug Info (Optional - can be removed in production)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.yellow[50],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.yellow),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              '🐛 Debug Info',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            Text('Current Route: ${Get.currentRoute}'),
-                            Text('User Logged In: ${authController.isLoggedIn}'),
-                            Text('User Name: ${authController.currentUser?.fullName ?? "None"}'),
-                            Text('Transactions Count: ${transactionController.transactions.length}'),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'ดูใน Console เพื่อดู debug messages',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
