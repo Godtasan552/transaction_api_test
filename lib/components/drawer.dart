@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:form_validate/routes/app_routes.dart';
 import 'package:form_validate/screens/create_transaction.dart';
 import 'package:get/get.dart';
 
@@ -57,7 +58,7 @@ class AppDrawer extends StatelessWidget {
               leading: Icon(Icons.grid_3x3_outlined),
               title: Text("Create Transiction"),
               onTap: () {
-                Get.to(CreateTransactionPage(token: '',));
+                Get.toNamed(AppRoutes.createTransaction);
               },
             ),
             ListTile(
