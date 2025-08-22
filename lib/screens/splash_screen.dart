@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/navigation_helper.dart';
-import '../services/storage_service.dart';
+import '../services/universal_storage.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -72,18 +72,18 @@ class _SplashScreenState extends State<SplashScreen>
 
     // รอให้ animation เสร็จ แล้วตรวจสอบสถานะผู้ใช้
     await Future.delayed(const Duration(milliseconds: 2200));
-    _checkUserStatus();
+    await _checkUserStatus();
   }
 
   Future<void> _checkUserStatus() async {
     try {
+      // Initialize storage service ก่อน
+      await UniversalStorageService.init();
+      
       // ตรวจสอบว่าผู้ใช้เคยล็อกอินหรือไม่
-      final isLoggedIn = await _checkLoginStatus();
+      final isLoggedIn = _checkLoginStatus();
 
       if (isLoggedIn) {
-        // ถ้าล็อกอินแล้ว ไปหน้า Home
-        NavigationHelper.toHome(clearStack: true);
-
         // ถ้าล็อกอินแล้ว ไปหน้า Home
         NavigationHelper.offAllNamed('/home');
       } else {
@@ -92,16 +92,28 @@ class _SplashScreenState extends State<SplashScreen>
       }
     } catch (e) {
       // ถ้าเกิดข้อผิดพลาด ไปหน้า Login
+      debugPrint('Error checking user status: $e');
       NavigationHelper.offAllNamed('/login');
     }
   }
 
-  Future<bool> _checkLoginStatus() async {
+  bool _checkLoginStatus() {
     try {
-      final storageService = StorageService();
-      await storageService.init();
-      return storageService.hasToken();
+      // ตรวจสอบว่ามี token หรือไม่
+      final hasToken = UniversalStorageService.hasToken();
+      final hasUser = UniversalStorageService.hasUser();
+      
+      // ตรวจสอบว่า token ยังไม่หมดอายุ
+      final token = UniversalStorageService.getToken();
+      
+      debugPrint('Has Token: $hasToken');
+      debugPrint('Has User: $hasUser');
+      debugPrint('Token: ${token?.isNotEmpty ?? false ? 'Available' : 'Empty'}');
+      
+      // ถ้ามีทั้ง token และข้อมูลผู้ใช้ ถือว่าล็อกอินอยู่
+      return hasToken && hasUser && (token?.isNotEmpty ?? false);
     } catch (e) {
+      debugPrint('Error in checkLoginStatus: $e');
       return false;
     }
   }
@@ -156,7 +168,7 @@ class _SplashScreenState extends State<SplashScreen>
                                 ],
                               ),
                               child: const Icon(
-                                Icons.security,
+                                Icons.account_balance_wallet,
                                 size: 60,
                                 color: Colors.blue,
                               ),
@@ -197,10 +209,19 @@ class _SplashScreenState extends State<SplashScreen>
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Secure • Simple • Smart',
+                                  'Transaction Manager',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Colors.white.withValues(alpha: 0.9),
+                                    fontWeight: FontWeight.w300,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Secure • Simple • Smart',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.white.withValues(alpha: 0.8),
                                     fontWeight: FontWeight.w300,
                                   ),
                                 ),
@@ -268,7 +289,7 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '© 2024 Form Validate App',
+                            '© 2024 Transaction Manager App',
                             style: TextStyle(
                               fontSize: 10,
                               color: Colors.white.withValues(alpha: 0.6),

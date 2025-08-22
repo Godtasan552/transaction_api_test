@@ -16,8 +16,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Home Page')),
-      drawer: AppDrawer(),
+      appBar: AppBar(title: const Text('Home')),
+      drawer: Drawer(),
       body: Obx(() {
         final user = authController.currentUser;
         

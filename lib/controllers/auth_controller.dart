@@ -4,7 +4,7 @@ import 'package:form_validate/utils/api.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import '../utils/navigation_helper.dart';
-import '../services/storage_service.dart';
+import '../services/universal_storage.dart';
 
 // AuthController สำหรับจัดการ state ของการ authentication
 class AuthController extends GetxController {
@@ -12,8 +12,6 @@ class AuthController extends GetxController {
   final _isLoggedIn = false.obs;
   final _isLoading = false.obs;
   final _currentUser = Rxn<User>();
-
-  final StorageService _storageService = StorageService();
 
   // Getters
   bool get isLoggedIn => _isLoggedIn.value;
@@ -28,7 +26,7 @@ class AuthController extends GetxController {
   }
 
   Future<void> _initStorageAndCheckLogin() async {
-    await _storageService.init();
+    await UniversalStorageService.init();
     _checkLoginStatus();
   }
 
@@ -36,17 +34,19 @@ class AuthController extends GetxController {
   Future<void> _checkLoginStatus() async {
     debugPrint('Checking login status...');
     try {
-      final token = _storageService.getToken();
+      final token = UniversalStorageService.getToken();
       if (token != null && token.isNotEmpty) {
         // โหลดข้อมูล user จาก storage
-        final userData = _storageService.getUser();
+        final userData = UniversalStorageService.getUser();
         if (userData != null) {
           final user = User.fromJson(userData);
           _setCurrentUser(user);
         }
         _setLoggedIn(true);
+        debugPrint('User is logged in');
       } else {
         _setLoggedIn(false);
+        debugPrint('User is not logged in');
       }
     } catch (e) {
       debugPrint('Error checking login status: $e');
@@ -59,17 +59,21 @@ class AuthController extends GetxController {
     try {
       _setLoading(true);
 
-      // จำลองการเรียก API
-      await Future.delayed(const Duration(seconds: 2));
+      debugPrint('Attempting login for: $email');
 
       final serviceUrl = '$BASE_URL$LOGIN_ENDPOINT';
-
       var url = Uri.parse(serviceUrl);
+      
+      debugPrint('Making request to: $serviceUrl');
+
       var response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'name': email, 'password': password}),
       );
+
+      debugPrint('Response status: ${response.statusCode}');
+      debugPrint('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         // login สำเร็จ
@@ -90,20 +94,24 @@ class AuthController extends GetxController {
         _setCurrentUser(user);
 
         // บันทึก token และข้อมูล user ลงใน local storage
-        await _storageService.saveToken(token);
-        await _storageService.saveUser(user.toJson());
+        await UniversalStorageService.saveToken(token);
+        await UniversalStorageService.saveUser(user.toJson());
 
         _setLoggedIn(true);
 
+        debugPrint('Login successful for user: ${user.fullName}');
+        NavigationHelper.showSuccessSnackBar('เข้าสู่ระบบสำเร็จ');
         NavigationHelper.toHome(clearStack: true);
 
         return true;
       } else {
         // login ไม่สำเร็จ
+        debugPrint('Login failed: ${response.reasonPhrase}');
         NavigationHelper.showErrorSnackBar('อีเมลหรือรหัสผ่านไม่ถูกต้อง');
         return false;
       }
     } catch (e) {
+      debugPrint('Login error: $e');
       NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาด: ${e.toString()}');
       return false;
     } finally {
@@ -121,11 +129,11 @@ class AuthController extends GetxController {
     try {
       _setLoading(true);
 
-      // จำลองการเรียก API
-      await Future.delayed(const Duration(seconds: 2));
+      debugPrint('Attempting registration for: $email');
 
       final serviceUrl = '$BASE_URL$REGISTER_ENDPOINT';
       var url = Uri.parse(serviceUrl);
+      
       var response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -137,8 +145,12 @@ class AuthController extends GetxController {
         }),
       );
 
+      debugPrint('Register response status: ${response.statusCode}');
+      debugPrint('Register response body: ${response.body}');
+
       if (response.statusCode == 201) {
         // แสดงผลสำเร็จ
+        debugPrint('Registration successful');
         NavigationHelper.showSuccessSnackBar('สมัครสมาชิกสำเร็จ');
         // กลับไปหน้า Login
         await Future.delayed(const Duration(milliseconds: 1500));
@@ -146,14 +158,19 @@ class AuthController extends GetxController {
 
         return true;
       } else {
-        NavigationHelper.showErrorSnackBar(
-          'สมัครสมาชิกไม่สำเร็จ: ${response.reasonPhrase}',
-        );
-
-        _setLoading(false);
+        debugPrint('Registration failed: ${response.reasonPhrase}');
+        final errorData = jsonDecode(response.body);
+        String errorMessage = 'สมัครสมาชิกไม่สำเร็จ';
+        
+        if (errorData['error'] != null) {
+          errorMessage = errorData['error'];
+        }
+        
+        NavigationHelper.showErrorSnackBar(errorMessage);
         return false;
       }
     } catch (e) {
+      debugPrint('Registration error: $e');
       NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาด: ${e.toString()}');
       return false;
     } finally {
@@ -166,15 +183,17 @@ class AuthController extends GetxController {
     try {
       _setLoading(true);
 
-      // จำลองการเรียก API
+      // จำลองการเรียก API (ยังไม่มี endpoint จริง)
       await Future.delayed(const Duration(seconds: 2));
 
+      debugPrint('Password reset requested for: $email');
       NavigationHelper.showSuccessSnackBar(
         'ส่งลิงก์รีเซ็ตรหัสผ่านไปยังอีเมลของคุณแล้ว',
       );
 
       return true;
     } catch (e) {
+      debugPrint('Reset password error: $e');
       NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาด: ${e.toString()}');
       return false;
     } finally {
@@ -187,17 +206,80 @@ class AuthController extends GetxController {
     try {
       _setLoading(true);
 
+      debugPrint('Logging out user: ${currentUser?.email}');
+
       // ลบ token และข้อมูลผู้ใช้
-      await _storageService.deleteToken();
-      await _storageService.deleteUser();
+      await UniversalStorageService.deleteToken();
+      await UniversalStorageService.deleteUser();
+      
+      // สามารถเลือกลบข้อมูล transactions ด้วย หรือเก็บไว้
+      // await UniversalStorageService.clearTransactions();
 
       _setLoggedIn(false);
       _setCurrentUser(null);
 
+      debugPrint('Logout successful');
       NavigationHelper.showSuccessSnackBar('ออกจากระบบแล้ว');
       NavigationHelper.toLogin(clearStack: true);
     } catch (e) {
+      debugPrint('Logout error: $e');
       NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาด: ${e.toString()}');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // ฟังก์ชันรีเฟรชข้อมูลผู้ใช้
+  Future<void> refreshUserData() async {
+    try {
+      _setLoading(true);
+      
+      final userData = UniversalStorageService.getUser();
+      if (userData != null) {
+        final user = User.fromJson(userData);
+        _setCurrentUser(user);
+        debugPrint('User data refreshed: ${user.fullName}');
+      }
+    } catch (e) {
+      debugPrint('Error refreshing user data: $e');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // ฟังก์ชันอัปเดตข้อมูลผู้ใช้
+  Future<bool> updateUserProfile({
+    String? firstName,
+    String? lastName,
+    String? email,
+  }) async {
+    try {
+      _setLoading(true);
+
+      final currentUserData = currentUser;
+      if (currentUserData == null) return false;
+
+      // สร้างข้อมูลใหม่
+      final updatedUser = User(
+        id: currentUserData.id,
+        email: email ?? currentUserData.email,
+        firstName: firstName ?? currentUserData.firstName,
+        lastName: lastName ?? currentUserData.lastName,
+        profileImage: currentUserData.profileImage,
+      );
+
+      // บันทึกข้อมูลใหม่
+      await UniversalStorageService.saveUser(updatedUser.toJson());
+      _setCurrentUser(updatedUser);
+
+      debugPrint('User profile updated: ${updatedUser.fullName}');
+      NavigationHelper.showSuccessSnackBar('อัปเดตข้อมูลสำเร็จ');
+      
+      return true;
+    } catch (e) {
+      debugPrint('Update profile error: $e');
+      NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาด: ${e.toString()}');
+      return false;
     } finally {
       _setLoading(false);
     }
@@ -215,9 +297,20 @@ class AuthController extends GetxController {
   void _setCurrentUser(User? user) {
     _currentUser.value = user;
   }
+
+  // Debug methods
+  void printStorageInfo() {
+    debugPrint('=== Storage Info ===');
+    debugPrint('Has Token: ${UniversalStorageService.hasToken()}');
+    debugPrint('Has User: ${UniversalStorageService.hasUser()}');
+    debugPrint('All Keys: ${UniversalStorageService.getAllKeys()}');
+    debugPrint('Is Logged In: $isLoggedIn');
+    debugPrint('Current User: ${currentUser?.email}');
+    debugPrint('==================');
+  }
 }
 
-// User model
+// User model (ไม่เปลี่ยนแปลง)
 class User {
   final String id;
   final String email;
@@ -255,9 +348,26 @@ class User {
       profileImage: json['profileImage'],
     );
   }
+
+  // Create copy with updated fields
+  User copyWith({
+    String? id,
+    String? email,
+    String? firstName,
+    String? lastName,
+    String? profileImage,
+  }) {
+    return User(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      profileImage: profileImage ?? this.profileImage,
+    );
+  }
 }
 
-// Binding สำหรับ Dependency Injection
+// Binding สำหรับ Dependency Injection (ไม่เปลี่ยนแปลง)
 class AuthBinding extends Bindings {
   @override
   void dependencies() {
