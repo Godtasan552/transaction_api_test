@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:form_validate/routes/app_routes.dart';
+import 'package:form_validate/screens/create_transaction.dart';
 import 'package:get/get.dart';
 
 import '../controllers/auth_controller.dart';
@@ -54,8 +56,10 @@ class AppDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: Icon(Icons.grid_3x3_outlined),
-              title: Text("Products"),
-              onTap: () {},
+              title: Text("Create Transiction"),
+              onTap: () {
+                Get.toNamed(AppRoutes.createTransaction);
+              },
             ),
             ListTile(
               leading: Icon(Icons.contact_mail),
