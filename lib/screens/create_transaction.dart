@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:form_validate/services/storage_service.dart';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
 class CreateTransactionPage extends StatefulWidget {
-  final String token; // รับ JWT token จากหน้าก่อน
-  const CreateTransactionPage({super.key, required this.token});
+  // เอา token parameter ออก เพราะจะดึงจาก StorageService เอง
+  const CreateTransactionPage({super.key, required String token});
 
   @override
   State<CreateTransactionPage> createState() => _CreateTransactionPageState();
@@ -17,50 +19,145 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
   final TextEditingController _amountController = TextEditingController();
   int _type = -1; // -1 = expense, 1 = income
   DateTime _selectedDate = DateTime.now();
-
   bool _loading = false;
+  
+  // เพิ่มตัวแปรสำหรับ StorageService
+  late StorageService _storageService;
+
+  @override
+  void initState() {
+    super.initState();
+    _initStorageService();
+  }
+
+  Future<void> _initStorageService() async {
+    try {
+      _storageService = StorageService();
+      await _storageService.init();
+      debugPrint("StorageService initialized successfully");
+    } catch (e) {
+      debugPrint("Failed to initialize StorageService: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("เกิดข้อผิดพลาดในการเริ่มต้นระบบ: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pop(context);
+      }
+    }
+  }
 
   Future<void> _createTransaction() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
 
-    final url = Uri.parse("https://transactions-cs.vercel.app/api/transaction"); // เปลี่ยนเป็น endpoint จริง
-    final body = {
-      "name": _nameController.text,
-      "desc": _descController.text,
-      "amount": int.tryParse(_amountController.text) ?? 0,
-      "type": _type,
-      "date": _selectedDate.toIso8601String().split("T")[0], // "YYYY-MM-DD"
-    };
-
     try {
+      // ใช้ StorageService ที่ init แล้ว
+      final token = _storageService.getToken();
+      
+      // ตรวจสอบ token
+      if (token == null || token.isEmpty) {
+        debugPrint("Token is null or empty");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("กรุณาเข้าสู่ระบบใหม่")),
+          );
+          Get.offAllNamed('/login');
+        }
+        return;
+      }
+
+      final url = Uri.parse("https://transactions-cs.vercel.app/api/transaction");
+      
+      final body = {
+        "name": _nameController.text.trim(),
+        "desc": _descController.text.trim(),
+        "amount": int.tryParse(_amountController.text) ?? 0,
+        "type": _type,
+        "date": _selectedDate.toIso8601String().split("T")[0],
+      };
+
+      // Debug log
+      debugPrint("====CREATE TRANSACTION DEBUG====");
+      debugPrint("Token exists: ${token.isNotEmpty}");
+      debugPrint("POST $url");
+      debugPrint("Body: ${jsonEncode(body)}");
+
       final res = await http.post(
         url,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer ${widget.token}",
+          "Authorization": "Bearer $token",
         },
         body: jsonEncode(body),
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Request timeout - กรุณาลองใหม่อีกครั้ง');
+        },
       );
 
-      final data = jsonDecode(res.body);
+      debugPrint("Status Code: ${res.statusCode}");
+      debugPrint("Response Body: ${res.body}");
+
       if (res.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Transaction created successfully")),
-        );
-        Navigator.pop(context, true); // ส่ง true กลับไปว่ามีการเพิ่มแล้ว
+        debugPrint("Transaction created successfully");
+        if (mounted) {
+          Get.snackbar(
+            'สำเร็จ',
+            'สร้างธุรกรรมสำเร็จ',
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+          );
+          Get.back(result: true);
+        }
+      } else if (res.statusCode == 401) {
+        debugPrint("Unauthorized - Token expired");
+        if (mounted) {
+          Get.snackbar(
+            'ข้อผิดพลาด',
+            'กรุณาเข้าสู่ระบบใหม่',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+          Get.offAllNamed('/login');
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${data["message"]}")),
-        );
+        String errorMessage;
+        try {
+          final data = jsonDecode(res.body);
+          errorMessage = data["message"] ?? "เกิดข้อผิดพลาด (${res.statusCode})";
+        } catch (e) {
+          errorMessage = "เกิดข้อผิดพลาด: ${res.statusCode} - ${res.reasonPhrase}";
+        }
+        
+        debugPrint("API Error: $errorMessage");
+        if (mounted) {
+          Get.snackbar(
+            'ข้อผิดพลาด',
+            errorMessage,
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      debugPrint("Exception occurred: $e");
+      if (mounted) {
+        Get.snackbar(
+          'ข้อผิดพลาด',
+          "เกิดข้อผิดพลาด: ${e.toString()}",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
     } finally {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -79,6 +176,14 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
   }
 
   @override
+  void dispose() {
+    _nameController.dispose();
+    _descController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("สร้างธุรกรรมใหม่")),
@@ -94,10 +199,12 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
                 validator: (val) =>
                     val == null || val.isEmpty ? "กรุณากรอกชื่อธุรกรรม" : null,
               ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _descController,
                 decoration: const InputDecoration(labelText: "รายละเอียด"),
               ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
@@ -146,4 +253,3 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
     );
   }
 }
-
