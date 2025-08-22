@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:form_validate/screens/create_transaction.dart';
 import 'package:get/get.dart';
 
 import '../controllers/auth_controller.dart';
@@ -54,8 +55,10 @@ class AppDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: Icon(Icons.grid_3x3_outlined),
-              title: Text("Products"),
-              onTap: () {},
+              title: Text("Create Transiction"),
+              onTap: () {
+                Get.to(CreateTransactionPage(token: '',));
+              },
             ),
             ListTile(
               leading: Icon(Icons.contact_mail),
