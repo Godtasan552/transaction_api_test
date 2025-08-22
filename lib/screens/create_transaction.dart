@@ -186,7 +186,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("สร้างธุรกรรมใหม่")),
+      appBar: AppBar(title: const Text("Create Transaction")),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -195,22 +195,22 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
             children: [
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: "ชื่อธุรกรรม"),
+                decoration: const InputDecoration(labelText: "Name Transaction"),
                 validator: (val) =>
-                    val == null || val.isEmpty ? "กรุณากรอกชื่อธุรกรรม" : null,
+                    val == null || val.isEmpty ? "Enter name transaction" : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _descController,
-                decoration: const InputDecoration(labelText: "รายละเอียด"),
+                decoration: const InputDecoration(labelText: "Detail"),
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: "จำนวนเงิน"),
+                decoration: const InputDecoration(labelText: "Amount"),
                 validator: (val) {
-                  if (val == null || val.isEmpty) return "กรุณากรอกจำนวนเงิน";
+                  if (val == null || val.isEmpty) return "please enter amount";
                   if (int.tryParse(val) == null) return "จำนวนเงินไม่ถูกต้อง";
                   return null;
                 },
@@ -218,10 +218,10 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
                 value: _type,
-                decoration: const InputDecoration(labelText: "ประเภทธุรกรรม"),
+                decoration: const InputDecoration(labelText: "Type transaction"),
                 items: const [
-                  DropdownMenuItem(value: -1, child: Text("รายจ่าย")),
-                  DropdownMenuItem(value: 1, child: Text("รายรับ")),
+                  DropdownMenuItem(value: -1, child: Text("Income")),
+                  DropdownMenuItem(value: 1, child: Text("Expenses")),
                 ],
                 onChanged: (val) {
                   setState(() => _type = val!);
@@ -231,11 +231,11 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
               Row(
                 children: [
                   Expanded(
-                    child: Text("วันที่: ${_selectedDate.toLocal()}".split(' ')[0]),
+                    child: Text("Date: ${_selectedDate.toLocal()}".split(' ')[0]),
                   ),
                   TextButton(
                     onPressed: _pickDate,
-                    child: const Text("เลือกวันที่"),
+                    child: const Text("Select date"),
                   )
                 ],
               ),
@@ -244,7 +244,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
                 onPressed: _loading ? null : _createTransaction,
                 child: _loading
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text("บันทึก"),
+                    : const Text("Save"),
               ),
             ],
           ),
