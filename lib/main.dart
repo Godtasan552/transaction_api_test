@@ -8,6 +8,7 @@ import 'screens/home.dart'; // สมมติว่ามีหน้า Home
 import 'controllers/auth_controller.dart';
 import 'controllers/trans_controller.dart';
 import 'services/universal_storage.dart';
+import 'components/drawer.dart';
 
 void main() async {
   // ต้องเรียก ensureInitialized ก่อนใช้ SharedPreferences
@@ -139,12 +140,14 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// หน้า Home Screen ตัวอย่าง
+// ✅ หน้า Home Screen ที่มี Drawer
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('🏠 Building HomeScreen with Drawer');
+    
     return GetBuilder<AuthController>(
       builder: (authController) {
         return GetBuilder<TransactionController>(
@@ -152,7 +155,7 @@ class HomeScreen extends StatelessWidget {
             return Scaffold(
               appBar: AppBar(
                 title: const Text('หน้าหลัก'),
-                automaticallyImplyLeading: false,
+                automaticallyImplyLeading: true, // ✅ แสดง drawer icon
                 actions: [
                   IconButton(
                     icon: const Icon(Icons.refresh),
@@ -163,6 +166,101 @@ class HomeScreen extends StatelessWidget {
                     onPressed: () => authController.logout(),
                   ),
                 ],
+              ),
+              // ✅ เพิ่ม Drawer
+              drawer: Drawer(
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    UserAccountsDrawerHeader(
+                      accountName: Text(
+                        authController.currentUser?.fullName ?? "ผู้ใช้",
+                        style: const TextStyle(
+                          fontSize: 20, 
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      accountEmail: Text(
+                        authController.currentUser?.email ?? "ไม่มีข้อมูลอีเมล",
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      currentAccountPicture: const CircleAvatar(
+                        backgroundColor: Colors.white,
+                        child: Icon(
+                          Icons.person, 
+                          size: 40, 
+                          color: Colors.blue,
+                        ),
+                      ),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.blue, Colors.blueAccent],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                    ),
+                    
+                    ListTile(
+                      leading: const Icon(Icons.home, color: Colors.blue),
+                      title: const Text("หน้าหลัก"),
+                      onTap: () {
+                        debugPrint('🏠 Home menu tapped');
+                        Navigator.pop(context);
+                      },
+                    ),
+                    
+                    ListTile(
+                      leading: const Icon(Icons.account_box, color: Colors.green),
+                      title: const Text("เกี่ยวกับ"),
+                      onTap: () {
+                        debugPrint('ℹ️ About menu tapped');
+                        Navigator.pop(context);
+                        Get.snackbar(
+                          'เกี่ยวกับ',
+                          'ข้อมูลเกี่ยวกับแอป',
+                          backgroundColor: Colors.green[100],
+                        );
+                      },
+                    ),
+                    
+                    ListTile(
+                      leading: const Icon(Icons.add, color: Colors.orange),
+                      title: const Text("เพิ่มรายการ"),
+                      onTap: () {
+                        debugPrint('➕ Add transaction menu tapped');
+                        Navigator.pop(context);
+                        _showAddTransactionDialog(context, 1);
+                      },
+                    ),
+                    
+                    ListTile(
+                      leading: const Icon(Icons.list, color: Colors.purple),
+                      title: const Text("ดูรายการทั้งหมด"),
+                      onTap: () {
+                        debugPrint('📋 View all transactions menu tapped');
+                        Navigator.pop(context);
+                        Get.snackbar(
+                          'รายการทั้งหมด',
+                          'ฟีเจอร์กำลังพัฒนา',
+                          backgroundColor: Colors.purple[100],
+                        );
+                      },
+                    ),
+                    
+                    const Divider(),
+                    
+                    ListTile(
+                      leading: const Icon(Icons.logout, color: Colors.red),
+                      title: const Text("ออกจากระบบ"),
+                      onTap: () {
+                        debugPrint('🚪 Logout menu tapped');
+                        Navigator.pop(context);
+                        _showLogoutDialog(context, authController);
+                      },
+                    ),
+                  ],
+                ),
               ),
               body: SafeArea(
                 child: SingleChildScrollView(
@@ -330,6 +428,11 @@ class HomeScreen extends StatelessWidget {
                                   TextButton(
                                     onPressed: () {
                                       // Navigate to all transactions
+                                      Get.snackbar(
+                                        'รายการทั้งหมด',
+                                        'ฟีเจอร์กำลังพัฒนา',
+                                        backgroundColor: Colors.blue[100],
+                                      );
                                     },
                                     child: const Text('ดูทั้งหมด'),
                                   ),
@@ -394,6 +497,34 @@ class HomeScreen extends StatelessWidget {
           },
         );
       },
+    );
+  }
+  
+  // ✅ เพิ่ม logout dialog
+  void _showLogoutDialog(BuildContext context, AuthController authController) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ออกจากระบบ'),
+        content: const Text('คุณต้องการออกจากระบบหรือไม่?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              authController.logout();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text(
+              'ออกจากระบบ',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
     );
   }
   
