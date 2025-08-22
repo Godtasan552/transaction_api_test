@@ -20,7 +20,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
   int _type = -1; // -1 = expense, 1 = income
   DateTime _selectedDate = DateTime.now();
   bool _loading = false;
-  
+
   // เพิ่มตัวแปรสำหรับ StorageService
   late StorageService _storageService;
 
@@ -57,21 +57,23 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
     try {
       // ใช้ StorageService ที่ init แล้ว
       final token = _storageService.getToken();
-      
+
       // ตรวจสอบ token
       if (token == null || token.isEmpty) {
         debugPrint("Token is null or empty");
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("กรุณาเข้าสู่ระบบใหม่")),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text("กรุณาเข้าสู่ระบบใหม่")));
           Get.offAllNamed('/login');
         }
         return;
       }
 
-      final url = Uri.parse("https://transactions-cs.vercel.app/api/transaction");
-      
+      final url = Uri.parse(
+        "https://transactions-cs.vercel.app/api/transaction",
+      );
+
       final body = {
         "name": _nameController.text.trim(),
         "desc": _descController.text.trim(),
@@ -86,19 +88,21 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
       debugPrint("POST $url");
       debugPrint("Body: ${jsonEncode(body)}");
 
-      final res = await http.post(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-        body: jsonEncode(body),
-      ).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Request timeout - กรุณาลองใหม่อีกครั้ง');
-        },
-      );
+      final res = await http
+          .post(
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer $token",
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception('Request timeout - กรุณาลองใหม่อีกครั้ง');
+            },
+          );
 
       debugPrint("Status Code: ${res.statusCode}");
       debugPrint("Response Body: ${res.body}");
@@ -106,13 +110,32 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
       if (res.statusCode == 201) {
         debugPrint("Transaction created successfully");
         if (mounted) {
-          Get.snackbar(
-            'สำเร็จ',
-            'สร้างธุรกรรมสำเร็จ',
-            backgroundColor: Colors.green,
-            colorText: Colors.white,
+          showDialog(
+            context: context,
+            builder: (ctx) {
+              return AlertDialog(
+                title: const Text("created successfully"),
+                content: Text(
+                  "Transaction \"${_nameController.text}\" successfully",
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop(); // ปิด popup
+                      _nameController.clear();
+                      _descController.clear();
+                      _amountController.clear();
+                      setState(() {
+                        _type = -1;
+                        _selectedDate = DateTime.now();
+                      });
+                    },
+                    child: const Text("OK"),
+                  ),
+                ],
+              );
+            },
           );
-          Get.back(result: true);
         }
       } else if (res.statusCode == 401) {
         debugPrint("Unauthorized - Token expired");
@@ -129,11 +152,13 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
         String errorMessage;
         try {
           final data = jsonDecode(res.body);
-          errorMessage = data["message"] ?? "เกิดข้อผิดพลาด (${res.statusCode})";
+          errorMessage =
+              data["message"] ?? "เกิดข้อผิดพลาด (${res.statusCode})";
         } catch (e) {
-          errorMessage = "เกิดข้อผิดพลาด: ${res.statusCode} - ${res.reasonPhrase}";
+          errorMessage =
+              "เกิดข้อผิดพลาด: ${res.statusCode} - ${res.reasonPhrase}";
         }
-        
+
         debugPrint("API Error: $errorMessage");
         if (mounted) {
           Get.snackbar(
@@ -195,9 +220,12 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
             children: [
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: "Name Transaction"),
-                validator: (val) =>
-                    val == null || val.isEmpty ? "Enter name transaction" : null,
+                decoration: const InputDecoration(
+                  labelText: "Name Transaction",
+                ),
+                validator: (val) => val == null || val.isEmpty
+                    ? "Enter name transaction"
+                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -218,7 +246,9 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
                 value: _type,
-                decoration: const InputDecoration(labelText: "Type transaction"),
+                decoration: const InputDecoration(
+                  labelText: "Type transaction",
+                ),
                 items: const [
                   DropdownMenuItem(value: -1, child: Text("Income")),
                   DropdownMenuItem(value: 1, child: Text("Expenses")),
@@ -231,12 +261,14 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
               Row(
                 children: [
                   Expanded(
-                    child: Text("Date: ${_selectedDate.toLocal()}".split(' ')[0]),
+                    child: Text(
+                      "Date: ${_selectedDate.toLocal()}".split(' ')[0],
+                    ),
                   ),
                   TextButton(
                     onPressed: _pickDate,
                     child: const Text("Select date"),
-                  )
+                  ),
                 ],
               ),
               const SizedBox(height: 20),
