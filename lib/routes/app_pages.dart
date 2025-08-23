@@ -1,3 +1,4 @@
+import 'package:form_validate/screens/create_transaction.dart';
 import 'package:get/get.dart';
 import 'app_routes.dart';
 
@@ -50,6 +51,11 @@ class AppPages {
       transition: Transition.zoom,
       transitionDuration: const Duration(milliseconds: 300),
     ),
+    //Route Transaction
+    GetPage(name: AppRoutes.createTransaction, page: () => CreateTransactionPage(token: ''),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds:300)
+    )
     /*
     GetPage(
       name: AppRoutes.PROFILE,
