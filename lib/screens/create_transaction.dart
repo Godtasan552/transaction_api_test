@@ -61,9 +61,9 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
       if (token == null || token.isEmpty) {
         debugPrint("Token is null or empty");
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("กรุณาเข้าสู่ระบบใหม่")),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text("กรุณาเข้าสู่ระบบใหม่")));
           Get.offAllNamed('/login');
         }
         return;
@@ -108,11 +108,12 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
 
       if (res.statusCode == 201) {
         debugPrint("Transaction created successfully");
-        
+
         // เพิ่มการบันทึก transaction ลง local storage (ถ้าต้องการ)
         try {
           final transactionData = {
-            "uuid": DateTime.now().millisecondsSinceEpoch.toString(), // สร้าง uuid ชั่วคราว
+            "uuid": DateTime.now().millisecondsSinceEpoch
+                .toString(), // สร้าง uuid ชั่วคราว
             "wallet": "default",
             "name": _nameController.text.trim(),
             "desc": _descController.text.trim(),
@@ -122,13 +123,13 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
             "createdAt": DateTime.now().toIso8601String(),
             "updatedAt": DateTime.now().toIso8601String(),
           };
-          
+
           await UniversalStorageService.addTransaction(transactionData);
           debugPrint("Transaction saved to local storage");
         } catch (e) {
           debugPrint("Failed to save transaction to local storage: $e");
         }
-        
+
         if (mounted) {
           showDialog(
             context: context,
@@ -136,12 +137,14 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
               return AlertDialog(
                 title: const Text("สร้างรายการสำเร็จ"),
                 content: Text(
-                  "รายการ \"${_nameController.text}\" ถูกสร้างเรียบร้อยแล้ว",
+                  'รายการ "${_nameController.text}" ถูกสร้างเรียบร้อยแล้ว',
                 ),
                 actions: [
                   TextButton(
                     onPressed: () {
-                      Navigator.of(ctx).pop(); // ปิด popup
+                      /// ปิด dialog และ navigate ไปหน้า Home
+                      Get.offAllNamed('/home'); 
+                      // ล้างฟอร์ม
                       _clearForm();
                     },
                     child: const Text("OK"),
@@ -166,9 +169,11 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
         String errorMessage;
         try {
           final data = jsonDecode(res.body);
-          errorMessage = data["message"] ?? "เกิดข้อผิดพลาด (${res.statusCode})";
+          errorMessage =
+              data["message"] ?? "เกิดข้อผิดพลาด (${res.statusCode})";
         } catch (e) {
-          errorMessage = "เกิดข้อผิดพลาด: ${res.statusCode} - ${res.reasonPhrase}";
+          errorMessage =
+              "เกิดข้อผิดพลาด: ${res.statusCode} - ${res.reasonPhrase}";
         }
 
         debugPrint("API Error: $errorMessage");
@@ -246,12 +251,11 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
                   labelText: "ชื่อรายการ",
                   border: OutlineInputBorder(),
                 ),
-                validator: (val) => val == null || val.isEmpty
-                    ? "กรุณากรอกชื่อรายการ"
-                    : null,
+                validator: (val) =>
+                    val == null || val.isEmpty ? "กรุณากรอกชื่อรายการ" : null,
               ),
               const SizedBox(height: 16),
-              
+
               TextFormField(
                 controller: _descController,
                 decoration: const InputDecoration(
@@ -261,7 +265,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
-              
+
               TextFormField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
@@ -278,7 +282,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
                 },
               ),
               const SizedBox(height: 16),
-              
+
               DropdownButtonFormField<int>(
                 value: _type,
                 decoration: const InputDecoration(
@@ -294,7 +298,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
                 },
               ),
               const SizedBox(height: 16),
-              
+
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -326,7 +330,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
                 ),
               ),
               const SizedBox(height: 24),
-              
+
               SizedBox(
                 height: 50,
                 child: ElevatedButton(

@@ -12,7 +12,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     print('🏠 Building HomeScreen');
-    
+
     return GetBuilder<AuthController>(
       builder: (authController) {
         return GetBuilder<TransactionController>(
@@ -35,8 +35,6 @@ class HomeScreen extends StatelessWidget {
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-
-
                     ListTile(
                       leading: const Icon(Icons.add, color: Colors.green),
                       title: const Text("สร้างรายการ"),
@@ -47,7 +45,7 @@ class HomeScreen extends StatelessWidget {
                         Get.toNamed('/create');
                       },
                     ),
-                    
+
                     ListTile(
                       leading: const Icon(Icons.list, color: Colors.purple),
                       title: const Text("ดูรายการทั้งหมด"),
@@ -61,7 +59,7 @@ class HomeScreen extends StatelessWidget {
                         );
                       },
                     ),
-                    
+
                     ListTile(
                       leading: const Icon(Icons.info, color: Colors.orange),
                       title: const Text("เกี่ยวกับ"),
@@ -75,9 +73,9 @@ class HomeScreen extends StatelessWidget {
                         );
                       },
                     ),
-                    
+
                     const Divider(),
-                    
+
                     ListTile(
                       leading: const Icon(Icons.logout, color: Colors.red),
                       title: const Text("ออกจากระบบ"),
@@ -96,10 +94,8 @@ class HomeScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-
-                      
                       const SizedBox(height: 16),
-                      
+
                       // Balance Summary Card
                       Card(
                         color: Colors.blue[50],
@@ -108,20 +104,27 @@ class HomeScreen extends StatelessWidget {
                           child: Column(
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     'ยอดคงเหลือ',
-                                    style: Theme.of(context).textTheme.titleMedium,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
                                   ),
                                   Text(
                                     '${transactionController.balance.toStringAsFixed(2)} ฿',
-                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: transactionController.balance >= 0 
-                                          ? Colors.green 
-                                          : Colors.red,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color:
+                                              transactionController.balance >= 0
+                                              ? Colors.green
+                                              : Colors.red,
+                                        ),
                                   ),
                                 ],
                               ),
@@ -176,9 +179,9 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // Quick Actions - Navigate to Create Page
                       Row(
                         children: [
@@ -186,9 +189,12 @@ class HomeScreen extends StatelessWidget {
                             child: ElevatedButton.icon(
                               onPressed: () {
                                 print('➕ Navigate to create income page');
-                                Get.to(() =>  CreateTransactionPage());
+                                Get.to(() => CreateTransactionPage());
                               },
-                              icon: const Icon(Icons.add_circle, color: Colors.green),
+                              icon: const Icon(
+                                Icons.add_circle,
+                                color: Colors.green,
+                              ),
                               label: const Text('เพิ่มรายรับ'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green[50],
@@ -201,9 +207,15 @@ class HomeScreen extends StatelessWidget {
                             child: ElevatedButton.icon(
                               onPressed: () {
                                 print('➖ Navigate to create expense page');
-                                Get.toNamed('/create', arguments: {'type': 'expense'});
+                                Get.toNamed(
+                                  '/create',
+                                  arguments: {'type': 'expense'},
+                                );
                               },
-                              icon: const Icon(Icons.remove_circle, color: Colors.red),
+                              icon: const Icon(
+                                Icons.remove_circle,
+                                color: Colors.red,
+                              ),
                               label: const Text('เพิ่มรายจ่าย'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red[50],
@@ -213,9 +225,9 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // Recent Transactions Card
                       Card(
                         child: Padding(
@@ -224,13 +236,15 @@ class HomeScreen extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     'รายการล่าสุด',
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.bold),
                                   ),
                                   TextButton(
                                     onPressed: () {
@@ -246,10 +260,9 @@ class HomeScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 8),
                               Obx(() {
-                                final recentTransactions = transactionController.transactions
-                                    .take(5)
-                                    .toList();
-                                
+                                final recentTransactions =
+                                    transactionController.paginatedTransactions;
+
                                 if (recentTransactions.isEmpty) {
                                   return const Center(
                                     child: Padding(
@@ -282,47 +295,79 @@ class HomeScreen extends StatelessWidget {
                                     ),
                                   );
                                 }
-                                
+
                                 return Column(
-                                  children: recentTransactions.map((transaction) {
-                                    return ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: CircleAvatar(
-                                        backgroundColor: transaction.type == 1 
-                                            ? Colors.green[50] 
-                                            : Colors.red[50],
-                                        child: Icon(
-                                          transaction.type == 1 
-                                              ? Icons.trending_up 
-                                              : Icons.trending_down,
-                                          color: transaction.type == 1 
-                                              ? Colors.green 
-                                              : Colors.red,
+                                  children: [
+                                    Column(
+                                      children: recentTransactions.map((
+                                        transaction,
+                                      ) {
+                                        return ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: CircleAvatar(
+                                            backgroundColor:
+                                                transaction.type == 1
+                                                ? Colors.green[50]
+                                                : Colors.red[50],
+                                            child: Icon(
+                                              transaction.type == 1
+                                                  ? Icons.trending_up
+                                                  : Icons.trending_down,
+                                              color: transaction.type == 1
+                                                  ? Colors.green
+                                                  : Colors.red,
+                                            ),
+                                          ),
+                                          title: Text(transaction.name),
+                                          subtitle: Text(
+                                            transaction.formattedDate,
+                                          ),
+                                          trailing: Text(
+                                            '${transaction.type == 1 ? '+' : '-'}${transaction.formattedAmount}',
+                                            style: TextStyle(
+                                              color: transaction.type == 1
+                                                  ? Colors.green[700]
+                                                  : Colors.red[700],
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        TextButton(
+                                          onPressed:
+                                              transactionController.prevPage,
+                                          child: const Text('⬅️ ก่อนหน้า'),
                                         ),
-                                      ),
-                                      title: Text(transaction.name),
-                                      subtitle: Text(transaction.formattedDate),
-                                      trailing: Text(
-                                        '${transaction.type == 1 ? '+' : '-'}${transaction.formattedAmount}',
-                                        style: TextStyle(
-                                          color: transaction.type == 1 
-                                              ? Colors.green[700] 
-                                              : Colors.red[700],
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
+                                        Text(
+                                          'หน้า ${transactionController.currentPage} / ${transactionController.totalPages}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  }).toList(),
+                                        TextButton(
+                                          onPressed:
+                                              transactionController.nextPage,
+                                          child: const Text('ถัดไป ➡️'),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 );
                               }),
+                              
                             ],
                           ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 24),
-                      
                     ],
                   ),
                 ),
@@ -333,7 +378,7 @@ class HomeScreen extends StatelessWidget {
       },
     );
   }
-  
+
   // Logout Dialog
   void _showLogoutDialog(BuildContext context, AuthController authController) {
     showDialog(

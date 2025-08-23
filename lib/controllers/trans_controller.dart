@@ -13,7 +13,48 @@ class TransactionController extends GetxController {
   final _transactions = <Transaction>[].obs;
   final _isLoading = false.obs;
   final _selectedTransaction = Rxn<Transaction>();
+  final _currentPage = 1.obs; // หน้าเริ่มต้น
+  final itemsPerPage = 5;
 
+  int get currentPage => _currentPage.value;
+  void nextPage() {
+    if ((_currentPage.value * itemsPerPage) < _transactions.length) {
+      _currentPage.value++;
+    }
+  }
+
+  void prevPage() {
+    if (_currentPage.value > 1) {
+      _currentPage.value--;
+    }
+  }
+
+  // คืนรายการตามหน้าปัจจุบัน
+  List<Transaction> get paginatedTransactions {
+    final start = (_currentPage.value - 1) * itemsPerPage;
+    final end = start + itemsPerPage;
+    return _transactions.sublist(
+      start,
+      end > _transactions.length ? _transactions.length : end,
+    );
+  }
+
+  // ==================== ยอดสำหรับรายการล่าสุด (paginated) ====================
+// ยอดสำหรับรายการล่าสุด (paginatedTransactions)
+double get totalIncomeLatest =>
+    paginatedTransactions
+        .where((t) => t.type == 1)
+        .fold(0.0, (sum, t) => sum + t.amount);
+
+double get totalExpenseLatest =>
+    paginatedTransactions
+        .where((t) => t.type == -1)
+        .fold(0.0, (sum, t) => sum + t.amount);
+
+double get balanceLatest => totalIncomeLatest - totalExpenseLatest;
+
+  // จำนวนหน้าทั้งหมด
+  int get totalPages => (_transactions.length / itemsPerPage).ceil();
   // Getters
   List<Transaction> get transactions => _transactions;
   bool get isLoading => _isLoading.value;
@@ -49,13 +90,15 @@ class TransactionController extends GetxController {
   // ==================== API METHODS ====================
 
   // โหลดข้อมูลธุรกรรมจาก API
-  Future<void> fetchTransactionsFromAPI() async {
+  Future<void> fetchTransactionsFromAPI({bool showMessage = false}) async {
     try {
       _setLoading(true);
 
       final token = UniversalStorageService.getToken();
       if (token == null) {
-        NavigationHelper.showErrorSnackBar('กรุณาเข้าสู่ระบบก่อน');
+        if (showMessage) {
+          NavigationHelper.showErrorSnackBar('กรุณาเข้าสู่ระบบก่อน');
+        }
         return;
       }
 
@@ -83,15 +126,23 @@ class TransactionController extends GetxController {
         // บันทึกลง local storage
         await _saveTransactionsToLocal();
 
-        debugPrint('Fetched ${fetchedTransactions.length} transactions from API');
-        NavigationHelper.showSuccessSnackBar('โหลดข้อมูลธุรกรรมสำเร็จ');
+        debugPrint(
+          'Fetched ${fetchedTransactions.length} transactions from API',
+        );
+        if (showMessage) {
+          NavigationHelper.showSuccessSnackBar('โหลดข้อมูลธุรกรรมสำเร็จ');
+        }
       } else {
         debugPrint('Failed to fetch transactions: ${response.reasonPhrase}');
-        NavigationHelper.showErrorSnackBar('ไม่สามารถโหลดข้อมูลได้');
+        if (showMessage) {
+          NavigationHelper.showErrorSnackBar('ไม่สามารถโหลดข้อมูลได้');
+        }
       }
     } catch (e) {
       debugPrint('Error fetching transactions: $e');
-      NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาด: ${e.toString()}');
+      if (showMessage) {
+        NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาด: ${e.toString()}');
+      }
     } finally {
       _setLoading(false);
     }
@@ -142,7 +193,9 @@ class TransactionController extends GetxController {
           .toList();
 
       _transactions.assignAll(loadedTransactions);
-      debugPrint('Loaded ${loadedTransactions.length} transactions from local storage');
+      debugPrint(
+        'Loaded ${loadedTransactions.length} transactions from local storage',
+      );
     } catch (e) {
       debugPrint('Error loading transactions from local: $e');
     }
@@ -178,7 +231,7 @@ class TransactionController extends GetxController {
 
       final transaction = Transaction(
         uuid: const Uuid().v4(),
-        wallet: walletId ?? 'default', // ใช้ default wallet หากไม่ระบุ
+        wallet: walletId ?? 'default',
         name: name,
         desc: description,
         amount: amount,
@@ -188,25 +241,19 @@ class TransactionController extends GetxController {
         updatedAt: DateTime.now(),
       );
 
-      // เพิ่มลงใน local list
       _transactions.add(transaction);
 
-      // บันทึกลง local storage
       await _saveTransactionsToLocal();
+      await syncTransactionToAPI(transaction);
 
-      // พยายาม sync กับ API
-      final synced = await syncTransactionToAPI(transaction);
-      if (!synced) {
-        debugPrint('Failed to sync new transaction to API, saved locally only');
-      }
+      // ✅ เพิ่มบรรทัดนี้เพื่อรีเฟรช GetBuilder
+      update();
 
       final typeText = type == 1 ? 'รายรับ' : 'รายจ่าย';
       NavigationHelper.showSuccessSnackBar('เพิ่ม$typeTextสำเร็จ');
 
-      debugPrint('Added transaction: ${transaction.name} (${transaction.amount})');
       return true;
     } catch (e) {
-      debugPrint('Error adding transaction: $e');
       NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาดในการเพิ่มธุรกรรม');
       return false;
     } finally {
@@ -253,7 +300,9 @@ class TransactionController extends GetxController {
       // พยายาม sync กับ API
       final synced = await syncTransactionToAPI(updatedTransaction);
       if (!synced) {
-        debugPrint('Failed to sync updated transaction to API, saved locally only');
+        debugPrint(
+          'Failed to sync updated transaction to API, saved locally only',
+        );
       }
 
       NavigationHelper.showSuccessSnackBar('แก้ไขธุรกรรมสำเร็จ');
@@ -307,9 +356,12 @@ class TransactionController extends GetxController {
     if (query.isEmpty) return _transactions;
 
     return _transactions
-        .where((transaction) =>
-            transaction.name.toLowerCase().contains(query.toLowerCase()) ||
-            (transaction.desc?.toLowerCase().contains(query.toLowerCase()) ?? false))
+        .where(
+          (transaction) =>
+              transaction.name.toLowerCase().contains(query.toLowerCase()) ||
+              (transaction.desc?.toLowerCase().contains(query.toLowerCase()) ??
+                  false),
+        )
         .toList();
   }
 
@@ -324,13 +376,17 @@ class TransactionController extends GetxController {
     List<Transaction> filtered = _transactions;
 
     if (startDate != null) {
-      filtered = filtered.where((t) => 
-          t.date.isAfter(startDate.subtract(const Duration(days: 1)))).toList();
+      filtered = filtered
+          .where(
+            (t) => t.date.isAfter(startDate.subtract(const Duration(days: 1))),
+          )
+          .toList();
     }
 
     if (endDate != null) {
-      filtered = filtered.where((t) => 
-          t.date.isBefore(endDate.add(const Duration(days: 1)))).toList();
+      filtered = filtered
+          .where((t) => t.date.isBefore(endDate.add(const Duration(days: 1))))
+          .toList();
     }
 
     return filtered;
@@ -338,8 +394,9 @@ class TransactionController extends GetxController {
 
   // กรองธุรกรรมตามเดือน
   List<Transaction> filterByMonth(int year, int month) {
-    return _transactions.where((t) => 
-        t.date.year == year && t.date.month == month).toList();
+    return _transactions
+        .where((t) => t.date.year == year && t.date.month == month)
+        .toList();
   }
 
   // ==================== STATISTICS ====================
@@ -354,16 +411,12 @@ class TransactionController extends GetxController {
         .where((t) => t.type == -1)
         .fold(0.0, (sum, t) => sum + t.amount);
 
-    return {
-      'income': income,
-      'expense': expense,
-      'balance': income - expense,
-    };
+    return {'income': income, 'expense': expense, 'balance': income - expense};
   }
 
   // สถิติตามหมวดหมู่ (ใช้ name เป็นหมวดหมู่)
   Map<String, double> getCategoryStatistics({int? type}) {
-    final filteredTransactions = type != null 
+    final filteredTransactions = type != null
         ? _transactions.where((t) => t.type == type).toList()
         : _transactions;
 
@@ -371,7 +424,8 @@ class TransactionController extends GetxController {
 
     for (final transaction in filteredTransactions) {
       final category = transaction.name; // หรือสามารถใช้ field อื่นเป็นหมวดหมู่
-      categoryTotals[category] = (categoryTotals[category] ?? 0) + transaction.amount;
+      categoryTotals[category] =
+          (categoryTotals[category] ?? 0) + transaction.amount;
     }
 
     return categoryTotals;
@@ -406,13 +460,13 @@ class TransactionController extends GetxController {
   Future<void> refreshData() async {
     try {
       _setLoading(true);
-      
+
       // โหลดจาก local storage ก่อน
       await loadTransactions();
-      
-      // จากนั้นพยายามดึงจาก API
-      await fetchTransactionsFromAPI();
-      
+
+      // จากนั้นพยายามดึงจาก API แต่ไม่โชว์ snackbar
+      await fetchTransactionsFromAPI(showMessage: false);
+
       debugPrint('Data refreshed successfully');
     } catch (e) {
       debugPrint('Error refreshing data: $e');
@@ -429,24 +483,29 @@ class TransactionController extends GetxController {
   }) {
     switch (sortBy) {
       case TransactionSortBy.date:
-        _transactions.sort((a, b) => ascending 
-            ? a.date.compareTo(b.date) 
-            : b.date.compareTo(a.date));
+        _transactions.sort(
+          (a, b) =>
+              ascending ? a.date.compareTo(b.date) : b.date.compareTo(a.date),
+        );
         break;
       case TransactionSortBy.amount:
-        _transactions.sort((a, b) => ascending 
-            ? a.amount.compareTo(b.amount) 
-            : b.amount.compareTo(a.amount));
+        _transactions.sort(
+          (a, b) => ascending
+              ? a.amount.compareTo(b.amount)
+              : b.amount.compareTo(a.amount),
+        );
         break;
       case TransactionSortBy.name:
-        _transactions.sort((a, b) => ascending 
-            ? a.name.compareTo(b.name) 
-            : b.name.compareTo(a.name));
+        _transactions.sort(
+          (a, b) =>
+              ascending ? a.name.compareTo(b.name) : b.name.compareTo(a.name),
+        );
         break;
       case TransactionSortBy.type:
-        _transactions.sort((a, b) => ascending 
-            ? a.type.compareTo(b.type) 
-            : b.type.compareTo(a.type));
+        _transactions.sort(
+          (a, b) =>
+              ascending ? a.type.compareTo(b.type) : b.type.compareTo(a.type),
+        );
         break;
     }
   }
@@ -517,8 +576,12 @@ class Transaction {
       amount: (json['amount'] ?? 0).toDouble(),
       type: json['type'] ?? 1,
       date: DateTime.parse(json['date'] ?? DateTime.now().toIso8601String()),
-      createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
-      updatedAt: DateTime.parse(json['updatedAt'] ?? DateTime.now().toIso8601String()),
+      createdAt: DateTime.parse(
+        json['createdAt'] ?? DateTime.now().toIso8601String(),
+      ),
+      updatedAt: DateTime.parse(
+        json['updatedAt'] ?? DateTime.now().toIso8601String(),
+      ),
     );
   }
 
@@ -544,8 +607,12 @@ class Transaction {
       amount: (json['amount'] ?? 0).toDouble(),
       type: json['type'] ?? 1,
       date: DateTime.parse(json['date'] ?? DateTime.now().toIso8601String()),
-      createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
-      updatedAt: DateTime.parse(json['updatedAt'] ?? DateTime.now().toIso8601String()),
+      createdAt: DateTime.parse(
+        json['createdAt'] ?? DateTime.now().toIso8601String(),
+      ),
+      updatedAt: DateTime.parse(
+        json['updatedAt'] ?? DateTime.now().toIso8601String(),
+      ),
     );
   }
 
@@ -578,7 +645,7 @@ class Transaction {
   String get typeText => type == 1 ? 'รายรับ' : 'รายจ่าย';
   String get formattedAmount => '${amount.toStringAsFixed(2)} ฿';
   String get formattedDate => '${date.day}/${date.month}/${date.year}';
-  
+
   @override
   String toString() {
     return 'Transaction{uuid: $uuid, name: $name, amount: $amount, type: $type}';
@@ -586,12 +653,7 @@ class Transaction {
 }
 
 // Enum สำหรับการเรียงลำดับ
-enum TransactionSortBy {
-  date,
-  amount,
-  name,
-  type,
-}
+enum TransactionSortBy { date, amount, name, type }
 
 // Binding สำหรับ Dependency Injection
 class TransactionBinding extends Bindings {
