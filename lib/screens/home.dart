@@ -24,14 +24,27 @@ class _HomeScreenState extends State<HomeScreen> {
   int totalPages = 1;
   double totalIncome = 0;
   double totalExpense = 0;
-  double totalBalance = 0; // เพิ่มยอดคงเหลือ
+  double totalBalance = 0;
+  
+  // เพิ่มตัวแปรสำหรับโหลดยอดรวมทั้งหมด
+  bool isLoadingSummary = false;
 
   @override
   void initState() {
     super.initState();
-    _loadTransactions();
+    _loadInitialData();
   }
 
+  // โหลดข้อมูลเริ่มต้น
+  Future<void> _loadInitialData() async {
+    // โหลดข้อมูลทั้งคู่พร้อมกัน
+    await Future.wait([
+      _loadTransactions(),
+      _loadSummaryData(),
+    ]);
+  }
+
+  // โหลดรายการธุรกรรม (แบ่งหน้า)
   Future<void> _loadTransactions() async {
     setState(() {
       isLoading = true;
@@ -73,8 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
         
         setState(() {
           transactions = List<Map<String, dynamic>>.from(data['data'] ?? []);
-          totalPages = data['totalPages'] ?? 1;
-          _calculateTotals();
+          totalPages = data['meta']['totalPages'] ?? 1; // เปลี่ยนจาก totalPages เป็น meta.totalPages
           isLoading = false;
         });
       } else if (response.statusCode == 401) {
@@ -97,31 +109,130 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _calculateTotals() {
-    totalIncome = 0;
-    totalExpense = 0;
+  // โหลดยอดรวมทั้งหมด - วิธีใหม่ที่มีประสิทธิภาพมากขึ้น
+  Future<void> _loadSummaryData() async {
+    setState(() {
+      isLoadingSummary = true;
+    });
+
+    try {
+      await UniversalStorageService.init();
+      final token = UniversalStorageService.getToken();
+
+      if (token == null || token.isEmpty) {
+        setState(() {
+          isLoadingSummary = false;
+        });
+        return;
+      }
+
+      // วิธี 1: ถ้า Backend มี Summary Endpoint (แนะนำ)
+      // final summaryUrl = Uri.parse(
+      //   "https://transactions-cs.vercel.app/api/transaction/summary",
+      // );
+
+      // วิธี 2: ใช้ pagination ขนาดใหญ่เพื่อดึงข้อมูลทั้งหมดในครั้งเดียว
+      final summaryUrl = Uri.parse(
+        "https://transactions-cs.vercel.app/api/transaction?page=1&limit=999999", // ใช้ limit ใหญ่มาก
+      );
+
+      final response = await http.get(
+        summaryUrl,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('Summary request timeout');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // ตรวจสอบว่ามี summary ใน response หรือไม่
+        if (data['summary'] != null) {
+          // วิธี 1: ถ้า Backend ส่ง summary มาให้
+          final summary = data['summary'];
+          setState(() {
+            totalIncome = (summary['totalIncome'] ?? 0).toDouble();
+            totalExpense = (summary['totalExpense'] ?? 0).toDouble();
+            totalBalance = (summary['totalBalance'] ?? 0).toDouble();
+          });
+        } else {
+          // วิธี 2: คำนวณจากข้อมูลทั้งหมดที่ได้รับ
+          final allTransactions = List<Map<String, dynamic>>.from(data['data'] ?? []);
+          _calculateTotalFromAllTransactions(allTransactions);
+        }
+      } else {
+        // ถ้าเรียก summary ไม่ได้ ให้ใช้ข้อมูลจาก transactions ปัจจุบัน
+        _calculateTotalsFromCurrentPage();
+      }
+    } catch (e) {
+      print('Error loading summary: $e');
+      // ถ้าโหลด summary ไม่ได้ ให้คำนวณจากรายการปัจจุบัน
+      _calculateTotalsFromCurrentPage();
+    } finally {
+      setState(() {
+        isLoadingSummary = false;
+      });
+    }
+  }
+
+  // คำนวณยอดรวมจากรายการทั้งหมด
+  void _calculateTotalFromAllTransactions(List<Map<String, dynamic>> allTransactions) {
+    double incomeSum = 0;
+    double expenseSum = 0;
+    
+    for (var transaction in allTransactions) {
+      final amount = (transaction['amount'] ?? 0).toDouble();
+      final type = transaction['type'] ?? 0;
+      
+      if (type == 1) {
+        incomeSum += amount;
+      } else if (type == -1) { // เพิ่มการตรวจสอบ type == -1 อย่างชัดเจน
+        expenseSum += amount;
+      }
+    }
+    
+    setState(() {
+      totalIncome = incomeSum;
+      totalExpense = expenseSum;
+      totalBalance = incomeSum - expenseSum;
+    });
+  }
+
+  // คำนวณยอดรวมจากหน้าปัจจุบัน (ใช้เป็น fallback) - แต่แสดงคำเตือน
+  void _calculateTotalsFromCurrentPage() {
+    double incomeSum = 0;
+    double expenseSum = 0;
     
     for (var transaction in transactions) {
       final amount = (transaction['amount'] ?? 0).toDouble();
       final type = transaction['type'] ?? 0;
       
       if (type == 1) {
-        totalIncome += amount;
-      } else {
-        totalExpense += amount;
+        incomeSum += amount;
+      } else if (type == -1) {
+        expenseSum += amount;
       }
     }
     
-    // คำนวณยอดคงเหลือ
-    totalBalance = totalIncome - totalExpense;
+    setState(() {
+      totalIncome = incomeSum;
+      totalExpense = expenseSum;
+      totalBalance = incomeSum - expenseSum;
+    });
   }
 
   Future<void> _navigateToCreateTransaction() async {
     final result = await Get.toNamed(AppRoutes.createTransaction);
     
-    // ถ้าสร้างธุรกรรมสำเร็จ รีเฟรชข้อมูล
+    // ถ้าสร้างธุรกรรมสำเร็จ รีเฟรชข้อมูลทั้งหมด
     if (result == true) {
-      _loadTransactions();
+      _loadInitialData();
     }
   }
 
@@ -130,21 +241,14 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         currentPage = page;
       });
-      _loadTransactions();
+      _loadTransactions(); // โหลดแค่รายการธุรกรรม ไม่ต้องโหลด summary ใหม่
     }
   }
 
-
-  /*
-   เปลี่ยนจาก popup เป็นไปหน้า detail
-  void _navigateToTransactionDetail(Map<String, dynamic> transaction) {
-    ไปหน้า detail แทนการแสดง dialog
-    Get.toNamed(
-      AppRoutes.transactionDetail, // จะต้องเพิ่ม route นี้ใน app_routes.dart
-      arguments: transaction,
-    );
+  // รีเฟรชข้อมูลทั้งหมด
+  Future<void> _refreshAllData() async {
+    await _loadInitialData();
   }
-  */
 
   @override
   Widget build(BuildContext context) {
@@ -154,13 +258,13 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadTransactions,
+            onPressed: _refreshAllData,
           ),
         ],
       ),
       drawer: AppDrawer(),
       body: RefreshIndicator(
-        onRefresh: _loadTransactions,
+        onRefresh: _refreshAllData,
         child: Obx(() {
           final user = authController.currentUser;
           
@@ -173,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   const SizedBox(height: 20),
                   
-                  // Summary Cards - เพิ่มยอดคงเหลือ
+                  // Summary Cards - แสดงยอดรวมที่ถูกต้อง
                   // Balance Card (แสดงใหญ่)
                   Card(
                     color: totalBalance >= 0 ? Colors.blue[50] : Colors.orange[50],
@@ -183,10 +287,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.all(20.0),
                       child: Column(
                         children: [
-                          Icon(
-                            Icons.account_balance_wallet, 
-                            color: totalBalance >= 0 ? Colors.blue : Colors.orange, 
-                            size: 32
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.account_balance_wallet, 
+                                color: totalBalance >= 0 ? Colors.blue : Colors.orange, 
+                                size: 32
+                              ),
+                              if (isLoadingSummary) ...[
+                                const SizedBox(width: 8),
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 12),
                           const Text(
@@ -205,6 +322,28 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: totalBalance >= 0 ? Colors.blue : Colors.orange,
                             ),
                           ),
+                          // แสดงคำเตือนถ้าไม่ได้โหลด summary แบบเต็ม
+                          if (!isLoadingSummary && totalPages > 1 && transactions.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  size: 16,
+                                  color: Colors.grey[600],
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'ยอดรวมทั้งหมด',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -222,8 +361,24 @@ class _HomeScreenState extends State<HomeScreen> {
                             padding: const EdgeInsets.all(16.0),
                             child: Column(
                               children: [
-                                Icon(Icons.arrow_upward, 
-                                     color: Colors.green, size: 24),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.arrow_upward, 
+                                         color: Colors.green, size: 24),
+                                    if (isLoadingSummary) ...[
+                                      const SizedBox(width: 4),
+                                      const SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                          color: Colors.green,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                                 const SizedBox(height: 8),
                                 const Text('รายรับ', 
                                      style: TextStyle(fontWeight: FontWeight.bold)),
@@ -245,8 +400,24 @@ class _HomeScreenState extends State<HomeScreen> {
                             padding: const EdgeInsets.all(16.0),
                             child: Column(
                               children: [
-                                Icon(Icons.arrow_downward, 
-                                     color: Colors.red, size: 24),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.arrow_downward, 
+                                         color: Colors.red, size: 24),
+                                    if (isLoadingSummary) ...[
+                                      const SizedBox(width: 4),
+                                      const SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                                 const SizedBox(height: 8),
                                 const Text('รายจ่าย', 
                                      style: TextStyle(fontWeight: FontWeight.bold)),
@@ -339,7 +510,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(height: 8),
                             ElevatedButton(
-                              onPressed: _loadTransactions,
+                              onPressed: _refreshAllData,
                               child: const Text('ลองใหม่'),
                             ),
                           ],
@@ -382,7 +553,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: InkWell(
-                              // เปลี่ยนจาก popup เป็นไปหน้า detail
+                              // TODO: เพิ่มการไปหน้า detail ในอนาคต
                               // onTap: () => _navigateToTransactionDetail(transaction),
                               borderRadius: BorderRadius.circular(8),
                               child: Padding(
@@ -475,14 +646,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ),
                                       ],
                                     ),
-                                    
-                                    // เพิ่มไอคอนลูกศร
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      Icons.chevron_right,
-                                      color: Colors.grey[400],
-                                      size: 20,
-                                    ),
                                   ],
                                 ),
                               ),
@@ -494,7 +657,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     
-                  // Improved Pagination Controls - แยกออกมาข้างนอก
+                  // Improved Pagination Controls
                   if (totalPages > 1 && !isLoading)
                     Container(
                       margin: const EdgeInsets.symmetric(vertical: 16),
@@ -517,7 +680,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             tooltip: 'หน้าก่อนหน้า',
                           ),
                           
-                          // Page Numbers (แสดงหน้าใกล้เคียง)
+                          // Page Numbers
                           ..._buildPageNumbers(),
                           
                           // Next Page Button
