@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:form_validate/utils/api.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
+import 'package:form_validate/services/api_service.dart';
 import '../utils/navigation_helper.dart';
 import '../services/universal_storage.dart';
 
@@ -59,235 +60,114 @@ class AuthController extends GetxController {
   }
 
   // ฟังก์ชันล็อกอิน
-  Future<bool> login({required String email, required String password}) async {
-    try {
-      _setLoading(true);
-
-      debugPrint('=== LOGIN DEBUG ===');
-      debugPrint('Attempting login for: $email');
-      debugPrint('Password length: ${password.length}');
-
-      final serviceUrl = '$BASE_URL$LOGIN_ENDPOINT';
-      var url = Uri.parse(serviceUrl);
-      
-      debugPrint('Making request to: $serviceUrl');
-
-      final requestBody = {
-        'name': email.trim(),
-        'password': password,
-      };
-
-      debugPrint('Request body: ${jsonEncode(requestBody)}');
-
-      var response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {
-          throw Exception('Request timeout - กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
-        },
-      );
-
-      debugPrint('Response status: ${response.statusCode}');
-      debugPrint('Response headers: ${response.headers}');
-      debugPrint('Response body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        try {
+    Future<bool> login({required String email, required String password}) async {
+      try {
+        _setLoading(true);
+        debugPrint('=== LOGIN DEBUG ===');
+        debugPrint('Attempting login for: $email');
+        debugPrint('Password length: ${password.length}');
+        final requestBody = {
+          'email': email,
+          'password': password,
+        };
+        debugPrint('Request body: ${jsonEncode(requestBody)}');
+        final response = await ApiService.post(LOGIN_ENDPOINT, requestBody);
+        debugPrint('Response status: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
+        if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
-          debugPrint('Parsed response data: $data');
-
-          // ตรวจสอบ structure ของ response
-          if (data['data'] == null) {
-            throw Exception('Invalid response structure: missing data field');
+          final token = data['token'] ?? data['access_token'];
+          final user = data['user'] ?? data['data'] ?? {};
+          if (token != null && user != null) {
+            await UniversalStorageService.saveToken(token);
+            await UniversalStorageService.saveUser(user);
+            _setLoggedIn(true);
+            _setCurrentUser(User.fromJson(user));
+            return true;
+          } else {
+            NavigationHelper.showErrorSnackBar('ข้อมูลผู้ใช้หรือ token ไม่ถูกต้อง');
+            return false;
           }
-
-          final token = data['data']['access'];
-          if (token == null || token.isEmpty) {
-            throw Exception('Invalid response: missing or empty access token');
-          }
-
-          // ดึงข้อมูลผู้ใช้
-          final userData = data['data']['auth'];
-          if (userData == null) {
-            throw Exception('Invalid response: missing auth data');
-          }
-
-          // สร้าง User object
-          final user = User(
-            id: userData['uuid']?.toString() ?? '',
-            email: userData['name']?.toString() ?? email,
-            firstName: userData['first_name']?.toString() ?? '',
-            lastName: userData['last_name']?.toString() ?? '',
-            profileImage: userData['profile_image']?.toString(),
-          );
-
-          debugPrint('Created user object: ${user.toJson()}');
-          _setCurrentUser(user);
-
-          // บันทึก token และข้อมูล user ลงใน local storage
-          await UniversalStorageService.saveToken(token);
-          await UniversalStorageService.saveUser(user.toJson());
-
-          _setLoggedIn(true);
-
-          debugPrint('Login successful for user: ${user.fullName}');
-          NavigationHelper.showSuccessSnackBar('เข้าสู่ระบบสำเร็จ');
-          
-          // ไม่ต้อง navigate ที่นี่ ให้ UI จัดการเอง
-          return true;
-
-        } catch (e) {
-          debugPrint('Error parsing login response: $e');
-          NavigationHelper.showErrorSnackBar('ข้อมูลตอบกลับจากเซิร์ฟเวอร์ไม่ถูกต้อง');
+        } else {
+          String msg = 'เข้าสู่ระบบไม่สำเร็จ: ${response.body}';
+          NavigationHelper.showErrorSnackBar(msg);
           return false;
         }
-      } else {
-        // login ไม่สำเร็จ
-        debugPrint('Login failed with status: ${response.statusCode}');
-        
-        String errorMessage = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
-        
-        try {
-          final errorData = jsonDecode(response.body);
-          if (errorData['message'] != null) {
-            errorMessage = errorData['message'];
-          } else if (errorData['error'] != null) {
-            errorMessage = errorData['error'];
-          }
-        } catch (e) {
-          debugPrint('Could not parse error response: $e');
+      } catch (e) {
+        debugPrint('Login error: $e');
+        String errorMessage = 'เกิดข้อผิดพลาด: ${e.toString()}';
+        if (e.toString().contains('timeout')) {
+          errorMessage = 'การเชื่อมต่อหมดเวลา กรุณาลองใหม่อีกครั้ง';
+        } else if (e.toString().contains('SocketException')) {
+          errorMessage = 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้';
         }
-
         NavigationHelper.showErrorSnackBar(errorMessage);
         return false;
+      } finally {
+        _setLoading(false);
       }
-    } catch (e) {
-      debugPrint('Login error: $e');
-      String errorMessage = 'เกิดข้อผิดพลาด: ${e.toString()}';
-      
-      // แปลงข้อความ error บางอย่างให้เป็นภาษาไทย
-      if (e.toString().contains('timeout')) {
-        errorMessage = 'การเชื่อมต่อหมดเวลา กรุณาลองใหม่อีกครั้ง';
-      } else if (e.toString().contains('SocketException')) {
-        errorMessage = 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต';
-      }
-      
-      NavigationHelper.showErrorSnackBar(errorMessage);
-      return false;
-    } finally {
-      _setLoading(false);
     }
-  }
 
   // ฟังก์ชันสมัครสมาชิก
-  Future<bool> register({
-    required String firstName,
-    required String lastName,
-    required String email,
-    required String password,
-  }) async {
-    try {
-      _setLoading(true);
-
-      debugPrint('=== REGISTER DEBUG ===');
-      debugPrint('Attempting registration for: $email');
-      debugPrint('First name: $firstName, Last name: $lastName');
-      debugPrint('Password length: ${password.length}');
-
-      final serviceUrl = '$BASE_URL$REGISTER_ENDPOINT';
-      var url = Uri.parse(serviceUrl);
-      
-      debugPrint('Making request to: $serviceUrl');
-
-      final requestBody = {
-        'name': email.trim(),
-        'password': password,
-        'first_name': firstName.trim(),
-        'last_name': lastName.trim(),
-      };
-
-      debugPrint('Request body: ${jsonEncode(requestBody)}');
-      
-      var response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {
-          throw Exception('Request timeout - กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
-        },
-      );
-
-      debugPrint('Register response status: ${response.statusCode}');
-      debugPrint('Register response headers: ${response.headers}');
-      debugPrint('Register response body: ${response.body}');
-
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        // แสดงผลสำเร็จ
-        debugPrint('Registration successful');
-        NavigationHelper.showSuccessSnackBar('สมัครสมาชิกสำเร็จ');
-        
-        // ไม่ต้อง navigate ที่นี่ ให้ UI จัดการเอง
-        return true;
-      } else {
-        debugPrint('Registration failed with status: ${response.statusCode}');
-        
-        String errorMessage = 'สมัครสมาชิกไม่สำเร็จ';
-        
-        try {
-          final errorData = jsonDecode(response.body);
-          debugPrint('Error data: $errorData');
-          
-          if (errorData['message'] != null) {
-            errorMessage = errorData['message'];
-          } else if (errorData['error'] != null) {
-            errorMessage = errorData['error'];
-          } else if (errorData['errors'] != null) {
-            // Handle validation errors
-            final errors = errorData['errors'];
-            if (errors is Map) {
-              final firstError = errors.values.first;
-              if (firstError is List && firstError.isNotEmpty) {
-                errorMessage = firstError[0];
-              } else {
-                errorMessage = firstError.toString();
+    Future<bool> register({
+      required String firstName,
+      required String lastName,
+      required String email,
+      required String password,
+    }) async {
+      try {
+        _setLoading(true);
+        debugPrint('=== REGISTER DEBUG ===');
+        debugPrint('Attempting registration for: $email');
+        debugPrint('First name: $firstName, Last name: $lastName');
+        debugPrint('Password length: ${password.length}');
+        final requestBody = {
+          'name': email,
+          'password': password,
+          'first_name': firstName,
+          'last_name': lastName,
+        };
+        debugPrint('Making request to: $BASE_URL$REGISTER_ENDPOINT');
+        debugPrint('Request body: ${jsonEncode(requestBody)}');
+        final response = await ApiService.post(REGISTER_ENDPOINT, requestBody);
+        debugPrint('Response status: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          return true;
+        } else {
+          // พยายามแปล error message จาก response
+          String errorMsg = 'สมัครสมาชิกไม่สำเร็จ';
+          try {
+            final errorData = jsonDecode(response.body);
+            if (errorData is Map) {
+              if (errorData['message'] != null) {
+                errorMsg = errorData['message'].toString();
+              } else if (errorData['error'] != null) {
+                errorMsg = errorData['error'].toString();
+              } else if (errorData['errors'] != null) {
+                final errors = errorData['errors'];
+                if (errors is Map && errors.isNotEmpty) {
+                  final firstError = errors.values.first;
+                  if (firstError is List && firstError.isNotEmpty) {
+                    errorMsg = firstError[0].toString();
+                  } else {
+                    errorMsg = firstError.toString();
+                  }
+                }
               }
             }
-          }
-        } catch (e) {
-          debugPrint('Could not parse error response: $e');
+          } catch (_) {}
+          NavigationHelper.showErrorSnackBar(errorMsg);
+          return false;
         }
-        
-        NavigationHelper.showErrorSnackBar(errorMessage);
+      } catch (e) {
+        debugPrint('Registration error: $e');
+        NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาดในการสมัครสมาชิก: ${e.toString()}');
         return false;
+      } finally {
+        _setLoading(false);
       }
-    } catch (e) {
-      debugPrint('Registration error: $e');
-      String errorMessage = 'เกิดข้อผิดพลาด: ${e.toString()}';
-      
-      // แปลงข้อความ error บางอย่างให้เป็นภาษาไทย
-      if (e.toString().contains('timeout')) {
-        errorMessage = 'การเชื่อมต่อหมดเวลา กรุณาลองใหม่อีกครั้ง';
-      } else if (e.toString().contains('SocketException')) {
-        errorMessage = 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต';
-      }
-      
-      NavigationHelper.showErrorSnackBar(errorMessage);
-      return false;
-    } finally {
-      _setLoading(false);
     }
-  }
 
   // ฟังก์ชันรีเซ็ตรหัสผ่าน
   Future<bool> resetPassword(String email) async {

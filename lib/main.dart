@@ -9,11 +9,20 @@ import 'screens/home.dart';
 import 'controllers/auth_controller.dart';
 import 'controllers/trans_controller.dart';
 import 'services/universal_storage.dart';
+import 'package:hive/hive.dart';
+import 'package:flutter/foundation.dart';
+import 'package:hive_flutter/hive_flutter.dart'; //
 
 void main() async {
   // ต้องเรียก ensureInitialized ก่อนใช้ SharedPreferences
   WidgetsFlutterBinding.ensureInitialized();
   
+  if (!kIsWeb) {
+    await Hive.initFlutter(); // ตอนนี้ควรจะใช้งานได้แล้ว
+  } else {
+    // สำหรับ Web
+    Hive.init('hive_boxes');
+  }
   // Initialize storage service
   await UniversalStorageService.init();
   
