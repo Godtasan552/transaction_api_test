@@ -52,10 +52,10 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('Email: ${_emailController.text}');
       debugPrint('Password length: ${_passwordController.text.length}');
       
-      bool loginSuccess = await authController.login(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
+        bool loginSuccess = await authController.login(
+          name: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
 
       debugPrint('Login result: $loginSuccess');
 

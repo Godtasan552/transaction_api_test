@@ -63,7 +63,7 @@ class AppDrawer extends StatelessWidget {
                       '🐛 Drawer Debug:',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    Text('User ID: ${user?.id ?? "❌"}'),
+                    Text('User ID: ${user?.uuid ?? "❌"}'),
                     Text('Email: ${user?.email ?? "❌"}'),
                     Text('Full Name: ${user?.fullName ?? "❌"}'),
                   ],

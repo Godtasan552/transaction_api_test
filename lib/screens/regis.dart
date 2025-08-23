@@ -55,9 +55,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       AuthController authController = Get.put(AuthController());
       bool registerSuccess = await authController.register(
+        name: _emailController.text.trim(),
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
-        email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 

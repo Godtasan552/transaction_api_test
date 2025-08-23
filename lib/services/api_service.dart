@@ -1,108 +1,74 @@
 import 'dart:convert';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart';
+import 'jwt_storage.dart';
 
-class ApiService {
+class ApiService extends GetxController {
   static const String baseUrl = 'https://transactions-cs.vercel.app/api';
-  
-  // สำหรับแก้ปัญหา CORS บน Web
-  static const String corsProxy = 'https://cors-anywhere.herokuapp.com/';
-  static const String alternativeCorsProxy = 'https://api.allorigins.win/raw?url=';
-  
-  static Map<String, String> get headers => {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    if (kIsWeb) 'Access-Control-Allow-Origin': '*',
-  };
-  
-  static String getApiUrl(String endpoint) {
-    // สำหรับ Web ใช้ CORS proxy
-    if (kIsWeb) {
-      // ลองใช้ cors-anywhere ก่อน
-      return '$corsProxy$baseUrl$endpoint';
+  String get version => "1.2.0";
+
+  Future<http.Response> _handleResponse(Future<http.Response> Function() apiCall) async {
+    final response = await apiCall();
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      await logout();
+      throw Exception('Token expired. User logged out.');
     }
-    // สำหรับ Mobile ใช้ URL ตรง
-    return '$baseUrl$endpoint';
+    return response;
   }
-  
-  static String getAlternativeApiUrl(String endpoint) {
-    // Fallback option สำหรับ Web
-    if (kIsWeb) {
-      return '${alternativeCorsProxy}${Uri.encodeComponent('$baseUrl$endpoint')}';
-    }
-    return '$baseUrl$endpoint';
+
+  Future<http.Response> get(String endpoint) async {
+    final token = await JwtStorage.getToken();
+    return _handleResponse(() => http.get(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'app_version': version,
+      },
+    ));
   }
-  
-  static Future<http.Response> post(String endpoint, Map<String, dynamic> body) async {
-    try {
-      print('🌐 Making API request to: ${getApiUrl(endpoint)}');
-      print('📤 Request body: ${jsonEncode(body)}');
-      
-      final response = await http.post(
-        Uri.parse(getApiUrl(endpoint)),
-        headers: headers,
-        body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 10));
-      
-      print('📥 Response status: ${response.statusCode}');
-      print('📥 Response body: ${response.body}');
-      
-      return response;
-      
-    } catch (e) {
-      print('❌ Primary request failed: $e');
-      
-      // ถ้า Web และ request แรกล้มเหลว ลอง alternative proxy
-      if (kIsWeb) {
-        try {
-          print('🔄 Trying alternative proxy...');
-          final alternativeResponse = await http.post(
-            Uri.parse(getAlternativeApiUrl(endpoint)),
-            headers: headers,
-            body: jsonEncode(body),
-          ).timeout(const Duration(seconds: 10));
-          
-          print('📥 Alternative response status: ${alternativeResponse.statusCode}');
-          return alternativeResponse;
-          
-        } catch (alternativeError) {
-          print('❌ Alternative request also failed: $alternativeError');
-        }
-      }
-      
-      rethrow;
+    Future<http.Response> put(String endpoint, Map<String, dynamic> body) async {
+      final token = await JwtStorage.getToken();
+      return _handleResponse(() => http.put(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'app_version': version,
+        },
+        body: json.encode(body),
+      ));
     }
+
+    Future<http.Response> delete(String endpoint) async {
+      final token = await JwtStorage.getToken();
+      return _handleResponse(() => http.delete(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'app_version': version,
+        },
+      ));
+    }
+
+  Future<http.Response> post(String endpoint, dynamic data, {bool withAuth = true}) async {
+    final token = withAuth ? await JwtStorage.getToken() : null;
+    return _handleResponse(() => http.post(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: {
+        if (withAuth) 'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'app_version': version,
+      },
+      body: json.encode(data),
+    ));
   }
-  
-  static Future<http.Response> get(String endpoint) async {
-    try {
-      print('🌐 Making GET request to: ${getApiUrl(endpoint)}');
-      
-      final response = await http.get(
-        Uri.parse(getApiUrl(endpoint)),
-        headers: headers,
-      ).timeout(const Duration(seconds: 10));
-      
-      print('📥 Response status: ${response.statusCode}');
-      return response;
-      
-    } catch (e) {
-      print('❌ GET request failed: $e');
-      
-      if (kIsWeb) {
-        try {
-          final alternativeResponse = await http.get(
-            Uri.parse(getAlternativeApiUrl(endpoint)),
-            headers: headers,
-          ).timeout(const Duration(seconds: 10));
-          
-          return alternativeResponse;
-        } catch (alternativeError) {
-          print('❌ Alternative GET request failed: $alternativeError');
-        }
-      }
-      
-      rethrow;
-    }
+
+  // put, delete ... (เหมือนกัน)
+  Future<bool> logout() async {
+    await JwtStorage.deleteToken();
+    Get.offAllNamed('/login');
+    return true;
   }
 }

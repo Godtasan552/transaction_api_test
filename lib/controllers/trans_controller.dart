@@ -1,3 +1,4 @@
+import '../controllers/trans_controller.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
@@ -5,8 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import '../utils/api.dart';
 import '../utils/navigation_helper.dart';
-import '../services/universal_storage.dart';
-import '../services/api_service.dart'; // เพิ่ม import ApiService
+import '../services/jwt_storage.dart';
+import '../services/api_service.dart';
 
 // Transaction Controller สำหรับจัดการข้อมูลธุรกรรม
 class TransactionController extends GetxController {
@@ -18,6 +19,7 @@ class TransactionController extends GetxController {
   final itemsPerPage = 5;
 
   int get currentPage => _currentPage.value;
+
   void nextPage() {
     if ((_currentPage.value * itemsPerPage) < _transactions.length) {
       _currentPage.value++;
@@ -55,6 +57,7 @@ class TransactionController extends GetxController {
 
   // จำนวนหน้าทั้งหมด
   int get totalPages => (_transactions.length / itemsPerPage).ceil();
+
   // Getters
   List<Transaction> get transactions => _transactions;
   bool get isLoading => _isLoading.value;
@@ -63,75 +66,51 @@ class TransactionController extends GetxController {
   // Filtered transactions
   List<Transaction> get incomeTransactions =>
       _transactions.where((t) => t.type == 1).toList();
-
   List<Transaction> get expenseTransactions =>
       _transactions.where((t) => t.type == -1).toList();
 
   // Summary calculations
   double get totalIncome =>
       incomeTransactions.fold(0.0, (sum, t) => sum + t.amount);
-
   double get totalExpense =>
       expenseTransactions.fold(0.0, (sum, t) => sum + t.amount);
-
   double get balance => totalIncome - totalExpense;
 
   @override
   void onInit() {
     super.onInit();
-    _initStorage();
+    refreshData();
   }
 
-  Future<void> _initStorage() async {
-    await UniversalStorageService.init();
-    await loadTransactions();
-  }
-
-  // ==================== API METHODS (แก้ไขใช้ ApiService) ====================
-
+  // ==================== API METHODS (ใช้ ApiService + JwtStorage) ====================
   // โหลดข้อมูลธุรกรรมจาก API
   Future<void> fetchTransactionsFromAPI({bool showMessage = false}) async {
     try {
       _setLoading(true);
-
-      final token = UniversalStorageService.getToken();
+      final token = await JwtStorage.getToken();
       if (token == null) {
         if (showMessage) {
           NavigationHelper.showErrorSnackBar('กรุณาเข้าสู่ระบบก่อน');
         }
         return;
       }
-
       debugPrint('🔄 Fetching transactions from API...');
-      
-      // ใช้ ApiService แทน http.get โดยตรง
-      final response = await _makeAuthenticatedGetRequest('/transaction', token);
-
+      final response = await ApiService().get('/transaction');
       debugPrint('📥 Fetch transactions response: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final transactionsData = data['data'] as List<dynamic>;
-
         final fetchedTransactions = transactionsData
             .map((json) => Transaction.fromApiJson(json))
             .toList();
-
         _transactions.assignAll(fetchedTransactions);
-
-        // บันทึกลง local storage
-        await _saveTransactionsToLocal();
-
-        debugPrint(
-          '✅ Fetched ${fetchedTransactions.length} transactions from API',
-        );
+        debugPrint('✅ Fetched ${fetchedTransactions.length} transactions from API');
         if (showMessage) {
           NavigationHelper.showSuccessSnackBar('โหลดข้อมูลธุรกรรมสำเร็จ');
         }
       } else {
         debugPrint('❌ Failed to fetch transactions: ${response.statusCode} - ${response.reasonPhrase}');
         debugPrint('Response body: ${response.body}');
-        
         if (showMessage) {
           NavigationHelper.showErrorSnackBar('ไม่สามารถโหลดข้อมูลได้ (${response.statusCode})');
         }
@@ -146,73 +125,17 @@ class TransactionController extends GetxController {
     }
   }
 
-  // ฟังก์ชันช่วยสำหรับ GET request ที่ต้องการ authentication
-  Future<http.Response> _makeAuthenticatedGetRequest(String endpoint, String token) async {
-    try {
-      // ลองใช้ ApiService.get แต่เพิ่ม Authorization header
-      final url = kIsWeb 
-          ? '${ApiService.corsProxy}$BASE_URL$endpoint'
-          : '$BASE_URL$endpoint';
-      
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-          if (kIsWeb) 'Access-Control-Allow-Origin': '*',
-        },
-      ).timeout(const Duration(seconds: 10));
-
-      return response;
-    } catch (e) {
-      debugPrint('❌ Primary authenticated GET request failed: $e');
-      
-      // ถ้าเป็น Web ลอง alternative proxy
-      if (kIsWeb) {
-        try {
-          debugPrint('🔄 Trying alternative proxy for GET request...');
-          final alternativeUrl = '${ApiService.alternativeCorsProxy}${Uri.encodeComponent('$BASE_URL$endpoint')}';
-          
-          final alternativeResponse = await http.get(
-            Uri.parse(alternativeUrl),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          ).timeout(const Duration(seconds: 10));
-          
-          return alternativeResponse;
-        } catch (alternativeError) {
-          debugPrint('❌ Alternative GET request also failed: $alternativeError');
-        }
-      }
-      
-      rethrow;
-    }
-  }
-
   // ส่งข้อมูลธุรกรรมไป API
   Future<bool> syncTransactionToAPI(Transaction transaction) async {
     try {
-      final token = UniversalStorageService.getToken();
+      final token = await JwtStorage.getToken();
       if (token == null) {
         debugPrint('❌ No token found for sync');
         return false;
       }
-
       debugPrint('🔄 Syncing transaction to API...');
-
-      // ใช้ ApiService สำหรับ POST request
-      final response = await _makeAuthenticatedPostRequest(
-        '/transaction', 
-        transaction.toApiJson(), 
-        token
-      );
-
+      final response = await ApiService().post('/transaction', transaction.toApiJson());
       debugPrint('📥 Sync transaction response: ${response.statusCode}');
-
       if (response.statusCode == 201 || response.statusCode == 200) {
         debugPrint('✅ Transaction synced successfully to API');
         return true;
@@ -226,93 +149,11 @@ class TransactionController extends GetxController {
     }
   }
 
-  // ฟังก์ชันช่วยสำหรับ POST request ที่ต้องการ authentication
-  Future<http.Response> _makeAuthenticatedPostRequest(
-    String endpoint, 
-    Map<String, dynamic> body, 
-    String token
-  ) async {
-    try {
-      final url = kIsWeb 
-          ? '${ApiService.corsProxy}$BASE_URL$endpoint'
-          : '$BASE_URL$endpoint';
-      
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-          if (kIsWeb) 'Access-Control-Allow-Origin': '*',
-        },
-        body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 10));
-
-      return response;
-    } catch (e) {
-      debugPrint('❌ Primary authenticated POST request failed: $e');
-      
-      if (kIsWeb) {
-        try {
-          debugPrint('🔄 Trying alternative proxy for POST request...');
-          final alternativeUrl = '${ApiService.alternativeCorsProxy}${Uri.encodeComponent('$BASE_URL$endpoint')}';
-          
-          final alternativeResponse = await http.post(
-            Uri.parse(alternativeUrl),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode(body),
-          ).timeout(const Duration(seconds: 10));
-          
-          return alternativeResponse;
-        } catch (alternativeError) {
-          debugPrint('❌ Alternative POST request also failed: $alternativeError');
-        }
-      }
-      
-      rethrow;
-    }
-  }
-
   // ==================== LOCAL STORAGE METHODS ====================
-
-  // โหลดข้อมูลธุรกรรมจาก local storage
-  Future<void> loadTransactions() async {
-    try {
-      final transactionsData = UniversalStorageService.getTransactions();
-      final loadedTransactions = transactionsData
-          .map((json) => Transaction.fromJson(json))
-          .toList();
-
-      _transactions.assignAll(loadedTransactions);
-      debugPrint(
-        '✅ Loaded ${loadedTransactions.length} transactions from local storage',
-      );
-    } catch (e) {
-      debugPrint('❌ Error loading transactions from local: $e');
-    }
-  }
-
-  // บันทึกข้อมูลธุรกรรมลง local storage
-  Future<void> _saveTransactionsToLocal() async {
-    try {
-      final transactionsJson = _transactions
-          .map((transaction) => transaction.toJson())
-          .toList();
-
-      await UniversalStorageService.saveTransactions(transactionsJson);
-      debugPrint('✅ Saved ${_transactions.length} transactions to local storage');
-    } catch (e) {
-      debugPrint('❌ Error saving transactions to local: $e');
-    }
-  }
+  // (ลบฟังก์ชัน local storage ถ้าไม่ต้องการ offline)
 
   // ==================== TRANSACTION CRUD ====================
-
-  // เพิ่มธุรกรรมใหม่
+  // เพิ่มธุรกรรมใหม่ (sync API ก่อน แล้วค่อยเพิ่มใน list)
   Future<bool> addTransaction({
     required String name,
     required double amount,
@@ -323,7 +164,6 @@ class TransactionController extends GetxController {
   }) async {
     try {
       _setLoading(true);
-
       final transaction = Transaction(
         uuid: const Uuid().v4(),
         wallet: walletId ?? 'default',
@@ -335,26 +175,18 @@ class TransactionController extends GetxController {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
-
-      _transactions.add(transaction);
-
-      await _saveTransactionsToLocal();
-      
-      // ลองส่งไป API แต่ไม่บังคับให้สำเร็จ (offline-first)
+      // ส่งไป API ก่อน
       final synced = await syncTransactionToAPI(transaction);
       if (synced) {
-        debugPrint('✅ Transaction synced to API successfully');
+        _transactions.add(transaction);
+        update();
+        final typeText = type == 1 ? 'รายรับ' : 'รายจ่าย';
+        NavigationHelper.showSuccessSnackBar('เพิ่ม$typeTextสำเร็จ');
+        return true;
       } else {
-        debugPrint('⚠️ Transaction saved locally only (API sync failed)');
+        NavigationHelper.showErrorSnackBar('เพิ่มธุรกรรมไม่สำเร็จ');
+        return false;
       }
-
-      // ✅ เพิ่มบรรทัดนี้เพื่อรีเฟรช GetBuilder
-      update();
-
-      final typeText = type == 1 ? 'รายรับ' : 'รายจ่าย';
-      NavigationHelper.showSuccessSnackBar('เพิ่ม$typeTextสำเร็จ');
-
-      return true;
     } catch (e) {
       debugPrint('❌ Error adding transaction: $e');
       NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาดในการเพิ่มธุรกรรม');
@@ -364,7 +196,7 @@ class TransactionController extends GetxController {
     }
   }
 
-  // อัปเดตธุรกรรม
+  // อัปเดตธุรกรรม (ควรเรียก API PUT /transaction/[id])
   Future<bool> updateTransaction({
     required String uuid,
     String? name,
@@ -376,13 +208,11 @@ class TransactionController extends GetxController {
   }) async {
     try {
       _setLoading(true);
-
       final index = _transactions.indexWhere((t) => t.uuid == uuid);
       if (index == -1) {
         NavigationHelper.showErrorSnackBar('ไม่พบธุรกรรมที่ต้องการแก้ไข');
         return false;
       }
-
       final existingTransaction = _transactions[index];
       final updatedTransaction = existingTransaction.copyWith(
         name: name,
@@ -393,22 +223,19 @@ class TransactionController extends GetxController {
         wallet: walletId,
         updatedAt: DateTime.now(),
       );
-
-      // อัปเดตใน local list
-      _transactions[index] = updatedTransaction;
-
-      // บันทึกลง local storage
-      await _saveTransactionsToLocal();
-
-      // พยายาม sync กับ API
-      final synced = await syncTransactionToAPI(updatedTransaction);
-      if (!synced) {
-        debugPrint('⚠️ Failed to sync updated transaction to API, saved locally only');
+      // เรียก API PUT
+      final response = await ApiService().put('/transaction/$uuid', updatedTransaction.toApiJson());
+      if (response.statusCode == 200) {
+        _transactions[index] = updatedTransaction;
+        update();
+        NavigationHelper.showSuccessSnackBar('แก้ไขธุรกรรมสำเร็จ');
+        debugPrint('✅ Updated transaction: ${updatedTransaction.name}');
+        return true;
+      } else {
+        debugPrint('❌ Failed to update transaction: ${response.statusCode}');
+        NavigationHelper.showErrorSnackBar('แก้ไขธุรกรรมไม่สำเร็จ');
+        return false;
       }
-
-      NavigationHelper.showSuccessSnackBar('แก้ไขธุรกรรมสำเร็จ');
-      debugPrint('✅ Updated transaction: ${updatedTransaction.name}');
-      return true;
     } catch (e) {
       debugPrint('❌ Error updating transaction: $e');
       NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาดในการแก้ไข');
@@ -418,29 +245,27 @@ class TransactionController extends GetxController {
     }
   }
 
-  // ลบธุรกรรม
+  // ลบธุรกรรม (API DELETE /transaction/[id])
   Future<bool> deleteTransaction(String uuid) async {
     try {
       _setLoading(true);
-
       final transaction = _transactions.firstWhereOrNull((t) => t.uuid == uuid);
       if (transaction == null) {
         NavigationHelper.showErrorSnackBar('ไม่พบธุรกรรมที่ต้องการลบ');
         return false;
       }
-
-      // ลบจาก local list
-      _transactions.removeWhere((t) => t.uuid == uuid);
-
-      // บันทึกลง local storage
-      await _saveTransactionsToLocal();
-
-      // TODO: เรียก API เพื่อลบจากเซิร์ฟเวอร์
-      // await _deleteTransactionFromAPI(uuid);
-
-      NavigationHelper.showSuccessSnackBar('ลบธุรกรรมสำเร็จ');
-      debugPrint('✅ Deleted transaction: ${transaction.name}');
-      return true;
+      final response = await ApiService().delete('/transaction/$uuid');
+      if (response.statusCode == 200) {
+        _transactions.removeWhere((t) => t.uuid == uuid);
+        update();
+        NavigationHelper.showSuccessSnackBar('ลบธุรกรรมสำเร็จ');
+        debugPrint('✅ Deleted transaction: ${transaction.name}');
+        return true;
+      } else {
+        debugPrint('❌ Failed to delete transaction: ${response.statusCode}');
+        NavigationHelper.showErrorSnackBar('ลบธุรกรรมไม่สำเร็จ');
+        return false;
+      }
     } catch (e) {
       debugPrint('❌ Error deleting transaction: $e');
       NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาดในการลบ');
@@ -451,11 +276,9 @@ class TransactionController extends GetxController {
   }
 
   // ==================== SEARCH & FILTER ====================
-
   // ค้นหาธุรกรรมตามชื่อ
   List<Transaction> searchTransactions(String query) {
     if (query.isEmpty) return _transactions;
-
     return _transactions
         .where(
           (transaction) =>
@@ -475,7 +298,6 @@ class TransactionController extends GetxController {
   // กรองธุรกรรมตามช่วงวันที่
   List<Transaction> filterByDateRange(DateTime? startDate, DateTime? endDate) {
     List<Transaction> filtered = _transactions;
-
     if (startDate != null) {
       filtered = filtered
           .where(
@@ -483,13 +305,11 @@ class TransactionController extends GetxController {
           )
           .toList();
     }
-
     if (endDate != null) {
       filtered = filtered
           .where((t) => t.date.isBefore(endDate.add(const Duration(days: 1))))
           .toList();
     }
-
     return filtered;
   }
 
@@ -501,7 +321,6 @@ class TransactionController extends GetxController {
   }
 
   // ==================== STATISTICS ====================
-
   // สถิติรายเดือน
   Map<String, double> getMonthlyStatistics(int year, int month) {
     final monthlyTransactions = filterByMonth(year, month);
@@ -511,7 +330,6 @@ class TransactionController extends GetxController {
     final expense = monthlyTransactions
         .where((t) => t.type == -1)
         .fold(0.0, (sum, t) => sum + t.amount);
-
     return {'income': income, 'expense': expense, 'balance': income - expense};
   }
 
@@ -520,33 +338,26 @@ class TransactionController extends GetxController {
     final filteredTransactions = type != null
         ? _transactions.where((t) => t.type == type).toList()
         : _transactions;
-
     final Map<String, double> categoryTotals = {};
-
     for (final transaction in filteredTransactions) {
       final category = transaction.name; // หรือสามารถใช้ field อื่นเป็นหมวดหมู่
       categoryTotals[category] =
           (categoryTotals[category] ?? 0) + transaction.amount;
     }
-
     return categoryTotals;
   }
 
   // ==================== UTILITY METHODS ====================
-
   // เลือกธุรกรรม
   void selectTransaction(Transaction? transaction) {
     _selectedTransaction.value = transaction;
   }
 
-  // ล้างข้อมูลธุรกรรมทั้งหมด
+  // ล้างข้อมูลธุรกรรมทั้งหมด (เฉพาะในแอป)
   Future<void> clearAllTransactions() async {
     try {
       _setLoading(true);
-
       _transactions.clear();
-      await UniversalStorageService.clearTransactions();
-
       NavigationHelper.showSuccessSnackBar('ล้างข้อมูลธุรกรรมทั้งหมดแล้ว');
       debugPrint('✅ Cleared all transactions');
     } catch (e) {
@@ -557,22 +368,12 @@ class TransactionController extends GetxController {
     }
   }
 
-  // รีเฟรชข้อมูล (ดึงจาก API และ local storage)
+  // รีเฟรชข้อมูล (โหลดจาก API)
   Future<void> refreshData() async {
     try {
       _setLoading(true);
-
-      // โหลดจาก local storage ก่อน
-      await loadTransactions();
-
-      // จากนั้นพยายามดึงจาก API แต่ไม่โชว์ snackbar (ไม่บังคับให้สำเร็จ)
-      try {
-        await fetchTransactionsFromAPI(showMessage: false);
-        debugPrint('✅ Data refreshed successfully (with API sync)');
-      } catch (e) {
-        debugPrint('⚠️ API sync failed during refresh, using local data only: $e');
-      }
-
+      await fetchTransactionsFromAPI(showMessage: false);
+      debugPrint('✅ Data refreshed successfully (from API)');
     } catch (e) {
       debugPrint('❌ Error refreshing data: $e');
       NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาดในการรีเฟรชข้อมูล');

@@ -60,7 +60,7 @@ class UserProfileCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          user.email,
+                          user.email ?? '-',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -79,7 +79,7 @@ class UserProfileCard extends StatelessWidget {
                   Icon(Icons.account_circle, color: Colors.grey[600], size: 16),
                   const SizedBox(width: 8),
                   Text(
-                    'ID: ${user.id}',
+                    'ID: ${user.uuid}',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey[600],
