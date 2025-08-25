@@ -4,7 +4,7 @@ import 'package:form_validate/services/storage_service.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import '../services/universal_storage.dart';
-
+import '../utils/api.dart';
 class CreateTransactionPage extends StatefulWidget {
   const CreateTransactionPage({super.key});
 
@@ -83,7 +83,7 @@ class _CreateTransactionPageState extends State<CreateTransactionPage> {
       }
 
       final url = Uri.parse(
-        "https://transactions-cs.vercel.app/api/transaction",
+        BASE_URL + CREATE_TARNSICTION_ENDPOINT 
       );
 
       final body = {
