@@ -1,4 +1,4 @@
-final BASE_URL = 'https://cors-anywhere.herokuapp.com/https://transactions-cs.vercel.app';
+final BASE_URL = 'https://transactions-cs.vercel.app';
 
 final LOGIN_ENDPOINT = '/api/auth/login';
 final REGISTER_ENDPOINT = '/api/auth/register';
