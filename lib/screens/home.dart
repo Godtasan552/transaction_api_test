@@ -65,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       final url = Uri.parse(
-        "https://transactions-cs.vercel.app/api/transaction?page=$currentPage&limit=5",
+        "https://cors-anywhere.herokuapp.com/https://transactions-cs.vercel.app/api/transaction?page=$currentPage&limit=5",
       );
 
       final response = await http.get(
@@ -133,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // วิธี 2: ใช้ pagination ขนาดใหญ่เพื่อดึงข้อมูลทั้งหมดในครั้งเดียว
       final summaryUrl = Uri.parse(
-        "https://transactions-cs.vercel.app/api/transaction?page=1&limit=999999", // ใช้ limit ใหญ่มาก
+        "https://cors-anywhere.herokuapp.com/https://transactions-cs.vercel.app/api/transaction?page=1&limit=999999", // ใช้ limit ใหญ่มาก
       );
 
       final response = await http.get(
