@@ -7,6 +7,7 @@ import 'package:form_validate/services/storage_service.dart';
 import '../controllers/auth_controller.dart';
 import '../routes/app_routes.dart';
 import '../services/universal_storage.dart';
+import 'detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -34,6 +35,11 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadInitialData();
   }
+
+  void _navigateToTransactionDetail(Map<String, dynamic> transaction) {
+  Get.to(() => TransactionDetailScreen(transaction: transaction));
+}
+
 
   // โหลดข้อมูลเริ่มต้น
   Future<void> _loadInitialData() async {
@@ -554,7 +560,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             margin: const EdgeInsets.only(bottom: 8),
                             child: InkWell(
                               // TODO: เพิ่มการไปหน้า detail ในอนาคต
-                              // onTap: () => _navigateToTransactionDetail(transaction),
+                               onTap: () => _navigateToTransactionDetail(transaction),
                               borderRadius: BorderRadius.circular(8),
                               child: Padding(
                                 padding: const EdgeInsets.all(16.0),
