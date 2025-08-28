@@ -36,8 +36,22 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadInitialData();
   }
 
-  void _navigateToTransactionDetail(Map<String, dynamic> transaction) {
-  Get.to(() => TransactionDetailScreen(transaction: transaction));
+  void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
+  final result = await Get.to(() => TransactionDetailScreen(
+        transaction: transaction,
+        onDelete: (deletedId) {
+          // ถ้ามี callback ลบจาก list ปัจจุบันก็ได้
+          setState(() {
+            transactions.removeWhere((t) => t['uuid'] == deletedId || t['id'] == deletedId);
+            _calculateTotalsFromCurrentPage();
+          });
+        },
+      ));
+
+  if (result == 'deleted') {
+    // รีโหลดข้อมูลหลังจากลบ
+    _loadInitialData();
+  }
 }
 
 
