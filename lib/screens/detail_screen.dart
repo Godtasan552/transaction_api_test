@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'edit_transaction.dart'; // อย่าลืม import ไฟล์ edit_transaction_page.dart
 
+
 class TransactionDetailScreen extends StatefulWidget {
   final Map<String, dynamic> transaction;
-  final Function(Map<String, dynamic>)? onDelete; // callback สำหรับลบข้อมูล
   final Function(Map<String, dynamic>)? onEdit; // เพิ่ม callback สำหรับแก้ไขข้อมูล
 
   const TransactionDetailScreen({
     super.key,
     required this.transaction,
-    this.onDelete,
     this.onEdit, // รับ onEdit เข้ามาใน constructor
   });
 
@@ -58,109 +57,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
     super.dispose();
   }
 
-  void _showDeleteDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              Icon(Icons.warning, color: Colors.orange.shade600, size: 28),
-              const SizedBox(width: 12),
-              const Text(
-                'ยืนยันการลบ',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-              ),
-            ],
-          ),
-          content: Text(
-            'คุณต้องการลบรายการ "${widget.transaction['name'] ?? 'ไม่ระบุชื่อ'}" หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'ยกเลิก',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Container(
-              margin: const EdgeInsets.only(left: 8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [Colors.red.shade600, Colors.red.shade400]),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TextButton(
-                onPressed: () async {
-                  Navigator.pop(context); // ปิด dialog
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (BuildContext context) => const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
 
-                  try {
-                    if (widget.onDelete != null) await widget.onDelete!(widget.transaction);
-                    Navigator.pop(context); // ปิด loading
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Row(
-                          children: [
-                            const Icon(Icons.check_circle, color: Colors.white),
-                            const SizedBox(width: 12),
-                            Text('ลบรายการ "${widget.transaction['name']}" เรียบร้อยแล้ว'),
-                          ],
-                        ),
-                        backgroundColor: Colors.green.shade600,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        duration: const Duration(seconds: 3),
-                      ),
-                    );
-                    Navigator.pop(context, 'deleted');
-                  } catch (e) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Row(
-                          children: const [
-                            Icon(Icons.error, color: Colors.white),
-                            SizedBox(width: 12),
-                            Expanded(child: Text('เกิดข้อผิดพลาดในการลบข้อมูล กรุณาลองใหม่อีกครั้ง')),
-                          ],
-                        ),
-                        backgroundColor: Colors.red.shade600,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        duration: const Duration(seconds: 4),
-                      ),
-                    );
-                  }
-                },
-                child: const Text(
-                  'ลบ',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // สร้าง method ใหม่สำหรับนำทางไปยังหน้าแก้ไข
+  // ฟังก์ชันนำทางไปหน้าแก้ไขยังคงอยู่
   void _navigateToEditScreen() async {
-    // ใช้ Navigator.push เพื่อนำทางไปยัง edit_transaction_page
-    // และส่งข้อมูล transaction ไปด้วย
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -168,12 +67,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
       ),
     );
 
-    // หากมีการแก้ไขและบันทึกข้อมูลสำเร็จ (result เป็น 'edited')
     if (result == 'edited') {
-      // สามารถเรียก callback หรือฟังก์ชันที่ต้องการได้ เช่น การอัปเดตข้อมูลบนหน้าจอหลัก
       if (widget.onEdit != null) {
-        // อาจจะต้องส่งข้อมูลที่แก้ไขแล้วกลับมาด้วย
-        // ตัวอย่างเช่น await widget.onEdit!(editedTransactionData);
+        // await widget.onEdit!(editedTransactionData);
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -190,7 +86,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
           duration: const Duration(seconds: 3),
         ),
       );
-      // pop หน้าจอ TransactionDetailScreen ออกไป
       Navigator.pop(context, 'edited'); 
     }
   }
@@ -262,21 +157,11 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                         tooltip: 'แก้ไข',
                       ),
                     ),
-                    // ปุ่ม Delete
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.white),
-                        onPressed: _showDeleteDialog,
-                        tooltip: 'ลบ',
-                      ),
-                    ),
+
                   ],
                 ),
               ),
+              // ส่วนรายละเอียดธุรกรรมยังคงเหมือนเดิม
               Expanded(
                 child: AnimatedBuilder(
                   animation: _animationController,
