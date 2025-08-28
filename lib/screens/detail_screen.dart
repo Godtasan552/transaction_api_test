@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
   final Map<String, dynamic> transaction;
+  final Function(Map<String, dynamic>)? onDelete; // เพิ่ม callback สำหรับลบข้อมูล
 
-  const TransactionDetailScreen({super.key, required this.transaction});
+  const TransactionDetailScreen({
+    super.key, 
+    required this.transaction,
+    this.onDelete, // เพิ่มพารามิเตอร์นี้
+  });
 
   @override
   State<TransactionDetailScreen> createState() => _TransactionDetailScreenState();
@@ -50,6 +55,171 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
     super.dispose();
   }
 
+  // ฟังก์ชันแสดง dialog ยืนยันการลบ
+  void _showDeleteDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.warning,
+                color: Colors.orange.shade600,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'ยืนยันการลบ',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'คุณต้องการลบรายการ "${widget.transaction['name'] ?? 'ไม่ระบุชื่อ'}" หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'ยกเลิก',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.only(left: 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.red.shade600, Colors.red.shade400],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextButton(
+                onPressed: () async {
+                  Navigator.pop(context); // ปิด dialog
+                  
+                  // แสดง loading dialog ขณะลบข้อมูล
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (BuildContext context) {
+                      return const Center(
+                        child: CircularProgressIndicator(),
+                      );
+                    },
+                  );
+
+                  try {
+                    // เรียกใช้ callback function เพื่อลบข้อมูล
+                    if (widget.onDelete != null) {
+                      await widget.onDelete!(widget.transaction);
+                    }
+                    
+                    // ปิด loading dialog
+                    Navigator.pop(context);
+                    
+                    // แสดงข้อความสำเร็จ
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(
+                              Icons.check_circle,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 12),
+                            Text('ลบรายการ "${widget.transaction['name']}" เรียบร้อยแล้ว'),
+                          ],
+                        ),
+                        backgroundColor: Colors.green.shade600,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                    
+                    // กลับไปหน้าแรกพร้อมส่ง result
+                    Navigator.pop(context, 'deleted');
+                    
+                  } catch (e) {
+                    // ปิด loading dialog
+                    Navigator.pop(context);
+                    
+                    // แสดงข้อความ error
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(
+                              Icons.error,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text('เกิดข้อผิดพลาดในการลบข้อมูล กรุณาลองใหม่อีกครั้ง'),
+                            ),
+                          ],
+                        ),
+                        backgroundColor: Colors.red.shade600,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  }
+                },
+                child: const Text(
+                  'ลบ',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ฟังก์ชันนำทางไปหน้าแก้ไข
+  void _navigateToEdit() async {
+    // TODO: Replace with your actual EditTransactionPage navigation
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditTransactionPage(
+          transaction: widget.transaction,
+        ),
+      ),
+    );
+    
+    // หากมีการแก้ไขข้อมูล ให้กลับไปหน้าแรกเพื่อ refresh ข้อมูล
+    if (result == 'updated') {
+      Navigator.pop(context, 'updated');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isIncome = widget.transaction['type'] == 1;
@@ -69,7 +239,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
         child: SafeArea(
           child: Column(
             children: [
-              // Custom App Bar with Gradient
+              // Custom App Bar with Gradient and Action Buttons
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
@@ -107,6 +277,31 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
+                      ),
+                    ),
+                    // Edit Button
+                    Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.white),
+                        onPressed: _navigateToEdit,
+                        tooltip: 'แก้ไข',
+                      ),
+                    ),
+                    // Delete Button
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.white),
+                        onPressed: _showDeleteDialog,
+                        tooltip: 'ลบ',
                       ),
                     ),
                   ],
@@ -362,6 +557,34 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// TODO: คุณต้องสร้าง EditTransactionPage class นี้
+class EditTransactionPage extends StatefulWidget {
+  final Map<String, dynamic> transaction;
+
+  const EditTransactionPage({super.key, required this.transaction});
+
+  @override
+  State<EditTransactionPage> createState() => _EditTransactionPageState();
+}
+
+class _EditTransactionPageState extends State<EditTransactionPage> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('แก้ไขรายการ'),
+      ),
+      body: const Center(
+        child: Text(
+          'หน้าแก้ไขรายการ\n(กรุณาสร้างหน้านี้ตามต้องการ)',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 18),
+        ),
       ),
     );
   }
