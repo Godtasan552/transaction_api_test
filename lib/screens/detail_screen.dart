@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'edit_transaction.dart'; // อย่าลืม import ไฟล์ edit_transaction_page.dart
 
 class TransactionDetailScreen extends StatefulWidget {
   final Map<String, dynamic> transaction;
-  final Function(Map<String, dynamic>)? onDelete; // เพิ่ม callback สำหรับลบข้อมูล
+  final Function(Map<String, dynamic>)? onDelete; // callback สำหรับลบข้อมูล
+  final Function(Map<String, dynamic>)? onEdit; // เพิ่ม callback สำหรับแก้ไขข้อมูล
 
   const TransactionDetailScreen({
-    super.key, 
+    super.key,
     required this.transaction,
-    this.onDelete, // เพิ่มพารามิเตอร์นี้
+    this.onDelete,
+    this.onEdit, // รับ onEdit เข้ามาใน constructor
   });
 
   @override
@@ -55,38 +58,25 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
     super.dispose();
   }
 
-  // ฟังก์ชันแสดง dialog ยืนยันการลบ
   void _showDeleteDialog() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
             children: [
-              Icon(
-                Icons.warning,
-                color: Colors.orange.shade600,
-                size: 28,
-              ),
+              Icon(Icons.warning, color: Colors.orange.shade600, size: 28),
               const SizedBox(width: 12),
               const Text(
                 'ยืนยันการลบ',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
               ),
             ],
           ),
           content: Text(
             'คุณต้องการลบรายการ "${widget.transaction['name'] ?? 'ไม่ระบุชื่อ'}" หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey.shade700,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
           ),
           actions: [
             TextButton(
@@ -103,84 +93,53 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
             Container(
               margin: const EdgeInsets.only(left: 8),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.red.shade600, Colors.red.shade400],
-                ),
+                gradient: LinearGradient(colors: [Colors.red.shade600, Colors.red.shade400]),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: TextButton(
                 onPressed: () async {
                   Navigator.pop(context); // ปิด dialog
-                  
-                  // แสดง loading dialog ขณะลบข้อมูล
                   showDialog(
                     context: context,
                     barrierDismissible: false,
-                    builder: (BuildContext context) {
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
-                    },
+                    builder: (BuildContext context) => const Center(
+                      child: CircularProgressIndicator(),
+                    ),
                   );
 
                   try {
-                    // เรียกใช้ callback function เพื่อลบข้อมูล
-                    if (widget.onDelete != null) {
-                      await widget.onDelete!(widget.transaction);
-                    }
-                    
-                    // ปิด loading dialog
-                    Navigator.pop(context);
-                    
-                    // แสดงข้อความสำเร็จ
+                    if (widget.onDelete != null) await widget.onDelete!(widget.transaction);
+                    Navigator.pop(context); // ปิด loading
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Row(
                           children: [
-                            const Icon(
-                              Icons.check_circle,
-                              color: Colors.white,
-                            ),
+                            const Icon(Icons.check_circle, color: Colors.white),
                             const SizedBox(width: 12),
                             Text('ลบรายการ "${widget.transaction['name']}" เรียบร้อยแล้ว'),
                           ],
                         ),
                         backgroundColor: Colors.green.shade600,
                         behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         duration: const Duration(seconds: 3),
                       ),
                     );
-                    
-                    // กลับไปหน้าแรกพร้อมส่ง result
                     Navigator.pop(context, 'deleted');
-                    
                   } catch (e) {
-                    // ปิด loading dialog
                     Navigator.pop(context);
-                    
-                    // แสดงข้อความ error
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Row(
-                          children: [
-                            const Icon(
-                              Icons.error,
-                              color: Colors.white,
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Text('เกิดข้อผิดพลาดในการลบข้อมูล กรุณาลองใหม่อีกครั้ง'),
-                            ),
+                          children: const [
+                            Icon(Icons.error, color: Colors.white),
+                            SizedBox(width: 12),
+                            Expanded(child: Text('เกิดข้อผิดพลาดในการลบข้อมูล กรุณาลองใหม่อีกครั้ง')),
                           ],
                         ),
                         backgroundColor: Colors.red.shade600,
                         behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         duration: const Duration(seconds: 4),
                       ),
                     );
@@ -188,11 +147,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                 },
                 child: const Text(
                   'ลบ',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -202,21 +157,41 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
     );
   }
 
-  // ฟังก์ชันนำทางไปหน้าแก้ไข
-  void _navigateToEdit() async {
-    // TODO: Replace with your actual EditTransactionPage navigation
+  // สร้าง method ใหม่สำหรับนำทางไปยังหน้าแก้ไข
+  void _navigateToEditScreen() async {
+    // ใช้ Navigator.push เพื่อนำทางไปยัง edit_transaction_page
+    // และส่งข้อมูล transaction ไปด้วย
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => EditTransactionPage(
-          transaction: widget.transaction,
-        ),
+        builder: (context) => edit_transaction_page(transaction: widget.transaction),
       ),
     );
-    
-    // หากมีการแก้ไขข้อมูล ให้กลับไปหน้าแรกเพื่อ refresh ข้อมูล
-    if (result == 'updated') {
-      Navigator.pop(context, 'updated');
+
+    // หากมีการแก้ไขและบันทึกข้อมูลสำเร็จ (result เป็น 'edited')
+    if (result == 'edited') {
+      // สามารถเรียก callback หรือฟังก์ชันที่ต้องการได้ เช่น การอัปเดตข้อมูลบนหน้าจอหลัก
+      if (widget.onEdit != null) {
+        // อาจจะต้องส่งข้อมูลที่แก้ไขแล้วกลับมาด้วย
+        // ตัวอย่างเช่น await widget.onEdit!(editedTransactionData);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('แก้ไขรายการเรียบร้อยแล้ว'),
+            ],
+          ),
+          backgroundColor: Colors.blue.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      // pop หน้าจอ TransactionDetailScreen ออกไป
+      Navigator.pop(context, 'edited'); 
     }
   }
 
@@ -224,14 +199,14 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
   Widget build(BuildContext context) {
     final isIncome = widget.transaction['type'] == 1;
     final amount = (widget.transaction['amount'] ?? 0).toDouble();
-    
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: isIncome 
+            colors: isIncome
                 ? [Colors.green.shade50, Colors.green.shade100, Colors.white]
                 : [Colors.red.shade50, Colors.red.shade100, Colors.white],
           ),
@@ -239,12 +214,11 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
         child: SafeArea(
           child: Column(
             children: [
-              // Custom App Bar with Gradient and Action Buttons
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: isIncome 
+                    colors: isIncome
                         ? [Colors.green.shade600, Colors.green.shade400]
                         : [Colors.red.shade600, Colors.red.shade400],
                   ),
@@ -272,14 +246,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                     Expanded(
                       child: Text(
                         widget.transaction['name'] ?? 'รายละเอียดธุรกรรม',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                     ),
-                    // Edit Button
+                    // ปุ่ม Edit
                     Container(
                       margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
@@ -288,11 +258,11 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                       ),
                       child: IconButton(
                         icon: const Icon(Icons.edit, color: Colors.white),
-                        onPressed: _navigateToEdit,
+                        onPressed: _navigateToEditScreen,
                         tooltip: 'แก้ไข',
                       ),
                     ),
-                    // Delete Button
+                    // ปุ่ม Delete
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
@@ -307,8 +277,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                   ],
                 ),
               ),
-              
-              // Content
               Expanded(
                 child: AnimatedBuilder(
                   animation: _animationController,
@@ -321,7 +289,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                           padding: const EdgeInsets.all(20.0),
                           child: Column(
                             children: [
-                              // Hero Amount Card
                               Transform.scale(
                                 scale: _scaleAnimation.value,
                                 child: Container(
@@ -331,7 +298,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                     gradient: LinearGradient(
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
-                                      colors: isIncome 
+                                      colors: isIncome
                                           ? [Colors.green.shade600, Colors.green.shade400]
                                           : [Colors.red.shade600, Colors.red.shade400],
                                     ),
@@ -388,17 +355,13 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                   ),
                                 ),
                               ),
-
                               const SizedBox(height: 32),
-
-                              // Transaction Details
                               _buildDetailCard(
                                 icon: Icons.receipt_long,
                                 title: 'ชื่อรายการ',
                                 content: widget.transaction['name'] ?? 'ไม่ระบุชื่อ',
                                 delay: 200,
                               ),
-
                               if (widget.transaction['desc'] != null &&
                                   widget.transaction['desc'].toString().isNotEmpty)
                                 _buildDetailCard(
@@ -407,14 +370,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                   content: widget.transaction['desc'],
                                   delay: 300,
                                 ),
-
                               _buildDetailCard(
                                 icon: Icons.calendar_today,
                                 title: 'วันที่',
                                 content: widget.transaction['date'] ?? '',
                                 delay: 400,
                               ),
-
                               _buildDetailCard(
                                 icon: Icons.category,
                                 title: 'ประเภท',
@@ -422,10 +383,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                 delay: 500,
                                 contentColor: isIncome ? Colors.green : Colors.red,
                               ),
-
                               const SizedBox(height: 32),
-
-                              // Action Buttons
                               Row(
                                 children: [
                                   Expanded(
@@ -448,10 +406,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                                         label: const Text(
                                           'กลับหน้าแรก',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                                         ),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: Colors.transparent,
@@ -520,11 +475,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                         color: Colors.blue.shade50,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
-                        icon,
-                        color: Colors.blue.shade600,
-                        size: 24,
-                      ),
+                      child: Icon(icon, color: Colors.blue.shade600, size: 24),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -533,20 +484,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                         children: [
                           Text(
                             title,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey.shade600,
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             content,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: contentColor ?? Colors.black87,
-                            ),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: contentColor ?? Colors.black87),
                           ),
                         ],
                       ),
@@ -557,34 +500,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-// TODO: คุณต้องสร้าง EditTransactionPage class นี้
-class EditTransactionPage extends StatefulWidget {
-  final Map<String, dynamic> transaction;
-
-  const EditTransactionPage({super.key, required this.transaction});
-
-  @override
-  State<EditTransactionPage> createState() => _EditTransactionPageState();
-}
-
-class _EditTransactionPageState extends State<EditTransactionPage> {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('แก้ไขรายการ'),
-      ),
-      body: const Center(
-        child: Text(
-          'หน้าแก้ไขรายการ\n(กรุณาสร้างหน้านี้ตามต้องการ)',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18),
-        ),
       ),
     );
   }
