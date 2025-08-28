@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:form_validate/utils/api.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'edit_transaction.dart';
@@ -225,9 +226,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
         return;
       }
 
-      final url = Uri.parse(
-        "https://cors-anywhere.herokuapp.com/https://transactions-cs.vercel.app/api/transaction/$transactionId",
-      );
+      // แก้ไข URL ให้เรียบร้อย
+      final url = Uri.parse('$BASE_URL$DELETE_TRANSACTION_ENDPOINT$transactionId');
+
 
       final response = await http.delete(
         url,

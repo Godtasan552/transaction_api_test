@@ -132,11 +132,6 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      // วิธี 1: ถ้า Backend มี Summary Endpoint (แนะนำ)
-      // final summaryUrl = Uri.parse(
-      //   "https://transactions-cs.vercel.app/api/transaction/summary",
-      // );
-
       // วิธี 2: ใช้ pagination ขนาดใหญ่เพื่อดึงข้อมูลทั้งหมดในครั้งเดียว
       final summaryUrl = Uri.parse(
         "https://transactions-cs.vercel.app/api/transaction?page=1&limit=999999", // ใช้ limit ใหญ่มาก

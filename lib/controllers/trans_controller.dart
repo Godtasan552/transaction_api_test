@@ -269,36 +269,55 @@ class TransactionController extends GetxController {
   }
 
   // ลบธุรกรรม
-  Future<bool> deleteTransaction(String uuid) async {
-    try {
-      _setLoading(true);
+Future<bool> deleteTransaction(String uuid) async {
+  try {
+    _setLoading(true);
 
-      final transaction = _transactions.firstWhereOrNull((t) => t.uuid == uuid);
-      if (transaction == null) {
-        NavigationHelper.showErrorSnackBar('ไม่พบธุรกรรมที่ต้องการลบ');
-        return false;
-      }
+    final transaction = _transactions.firstWhereOrNull((t) => t.uuid == uuid);
+    if (transaction == null) {
+      NavigationHelper.showErrorSnackBar('ไม่พบธุรกรรมที่ต้องการลบ');
+      return false;
+    }
 
-      // ลบจาก local list
-      _transactions.removeWhere((t) => t.uuid == uuid);
+    final token = UniversalStorageService.getToken();
+    if (token == null) {
+      NavigationHelper.showErrorSnackBar('กรุณาเข้าสู่ระบบก่อน');
+      return false;
+    }
 
-      // บันทึกลง local storage
-      await _saveTransactionsToLocal();
+    // ลบจาก local list
+    _transactions.removeWhere((t) => t.uuid == uuid);
 
-      // TODO: เรียก API เพื่อลบจากเซิร์ฟเวอร์
-      // await _deleteTransactionFromAPI(uuid);
+    // บันทึกลง local storage
+    await _saveTransactionsToLocal();
 
+    // ลบจาก API
+    final serviceUrl = '$BASE_URL$DELETE_TRANSACTION_ENDPOINT$uuid';
+    final response = await http.delete(
+      Uri.parse(serviceUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) {
       NavigationHelper.showSuccessSnackBar('ลบธุรกรรมสำเร็จ');
       debugPrint('Deleted transaction: ${transaction.name}');
       return true;
-    } catch (e) {
-      debugPrint('Error deleting transaction: $e');
-      NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาดในการลบ');
+    } else {
+      debugPrint('Failed to delete transaction: ${response.reasonPhrase}');
+      NavigationHelper.showErrorSnackBar('ไม่สามารถลบธุรกรรมได้');
       return false;
-    } finally {
-      _setLoading(false);
     }
+  } catch (e) {
+    debugPrint('Error deleting transaction: $e');
+    NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาดในการลบ');
+    return false;
+  } finally {
+    _setLoading(false);
   }
+}
 
   // ==================== SEARCH & FILTER ====================
 
