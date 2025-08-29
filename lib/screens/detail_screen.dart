@@ -311,7 +311,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
 
   // ฟังก์ชันไปหน้า Edit
   void _navigateToEditScreen() async {
-    final updatedTransaction = await Navigator.push(
+    final updatedTransaction = await 
+    Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => EditTransactionPage(transaction: widget.transaction),

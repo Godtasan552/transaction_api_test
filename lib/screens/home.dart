@@ -26,7 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double totalIncome = 0;
   double totalExpense = 0;
   double totalBalance = 0;
-  
+
   // เพิ่มตัวแปรสำหรับโหลดยอดรวมทั้งหมด
   bool isLoadingSummary = false;
 
@@ -36,22 +36,32 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadInitialData();
   }
 
-void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
-  final result = await Get.to(() => TransactionDetailScreen(transaction: transaction));
-  if (result == 'edited') {
-    _loadInitialData(); // รีเฟรช Home ตอนผู้ใช้กด back ออกจาก Detail
+  void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
+    final result = await Get.to(
+      () => TransactionDetailScreen(
+        transaction: transaction,
+        onDelete: (deletedId) {
+          // ลบรายการออกจาก list ในหน้า home ทันที
+          setState(() {
+            transactions.removeWhere(
+              (t) => t['uuid'] == deletedId || t['id'] == deletedId,
+            );
+          });
+          // โหลด summary ใหม่
+          _loadSummaryData();
+        },
+      ),
+    );
+
+    if (result == 'edited' || result == 'deleted') {
+      _loadInitialData(); // รีเฟรช Home
+    }
   }
-}
-
-
 
   // โหลดข้อมูลเริ่มต้น
   Future<void> _loadInitialData() async {
     // โหลดข้อมูลทั้งคู่พร้อมกัน
-    await Future.wait([
-      _loadTransactions(),
-      _loadSummaryData(),
-    ]);
+    await Future.wait([_loadTransactions(), _loadSummaryData()]);
   }
 
   // โหลดรายการธุรกรรม (แบ่งหน้า)
@@ -78,25 +88,29 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
         "https://transactions-cs.vercel.app/api/transaction?page=$currentPage&limit=5",
       );
 
-      final response = await http.get(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-      ).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Request timeout - กรุณาลองใหม่อีกครั้ง');
-        },
-      );
+      final response = await http
+          .get(
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer $token",
+            },
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception('Request timeout - กรุณาลองใหม่อีกครั้ง');
+            },
+          );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
+
         setState(() {
           transactions = List<Map<String, dynamic>>.from(data['data'] ?? []);
-          totalPages = data['meta']['totalPages'] ?? 1; // เปลี่ยนจาก totalPages เป็น meta.totalPages
+          totalPages =
+              data['meta']['totalPages'] ??
+              1; // เปลี่ยนจาก totalPages เป็น meta.totalPages
           isLoading = false;
         });
       } else if (response.statusCode == 401) {
@@ -141,22 +155,24 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
         "https://transactions-cs.vercel.app/api/transaction?page=1&limit=999999", // ใช้ limit ใหญ่มาก
       );
 
-      final response = await http.get(
-        summaryUrl,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-      ).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {
-          throw Exception('Summary request timeout');
-        },
-      );
+      final response = await http
+          .get(
+            summaryUrl,
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer $token",
+            },
+          )
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () {
+              throw Exception('Summary request timeout');
+            },
+          );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
+
         // ตรวจสอบว่ามี summary ใน response หรือไม่
         if (data['summary'] != null) {
           // วิธี 1: ถ้า Backend ส่ง summary มาให้
@@ -168,7 +184,9 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
           });
         } else {
           // วิธี 2: คำนวณจากข้อมูลทั้งหมดที่ได้รับ
-          final allTransactions = List<Map<String, dynamic>>.from(data['data'] ?? []);
+          final allTransactions = List<Map<String, dynamic>>.from(
+            data['data'] ?? [],
+          );
           _calculateTotalFromAllTransactions(allTransactions);
         }
       } else {
@@ -187,21 +205,24 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
   }
 
   // คำนวณยอดรวมจากรายการทั้งหมด
-  void _calculateTotalFromAllTransactions(List<Map<String, dynamic>> allTransactions) {
+  void _calculateTotalFromAllTransactions(
+    List<Map<String, dynamic>> allTransactions,
+  ) {
     double incomeSum = 0;
     double expenseSum = 0;
-    
+
     for (var transaction in allTransactions) {
       final amount = (transaction['amount'] ?? 0).toDouble();
       final type = transaction['type'] ?? 0;
-      
+
       if (type == 1) {
         incomeSum += amount;
-      } else if (type == -1) { // เพิ่มการตรวจสอบ type == -1 อย่างชัดเจน
+      } else if (type == -1) {
+        // เพิ่มการตรวจสอบ type == -1 อย่างชัดเจน
         expenseSum += amount;
       }
     }
-    
+
     setState(() {
       totalIncome = incomeSum;
       totalExpense = expenseSum;
@@ -213,18 +234,18 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
   void _calculateTotalsFromCurrentPage() {
     double incomeSum = 0;
     double expenseSum = 0;
-    
+
     for (var transaction in transactions) {
       final amount = (transaction['amount'] ?? 0).toDouble();
       final type = transaction['type'] ?? 0;
-      
+
       if (type == 1) {
         incomeSum += amount;
       } else if (type == -1) {
         expenseSum += amount;
       }
     }
-    
+
     setState(() {
       totalIncome = incomeSum;
       totalExpense = expenseSum;
@@ -234,7 +255,7 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
 
   Future<void> _navigateToCreateTransaction() async {
     final result = await Get.toNamed(AppRoutes.createTransaction);
-    
+
     // ถ้าสร้างธุรกรรมสำเร็จ รีเฟรชข้อมูลทั้งหมด
     if (result == true) {
       _loadInitialData();
@@ -272,7 +293,7 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
         onRefresh: _refreshAllData,
         child: Obx(() {
           final user = authController.currentUser;
-          
+
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             child: Padding(
@@ -281,11 +302,13 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
-                  
+
                   // Summary Cards - แสดงยอดรวมที่ถูกต้อง
                   // Balance Card (แสดงใหญ่)
                   Card(
-                    color: totalBalance >= 0 ? Colors.blue[50] : Colors.orange[50],
+                    color: totalBalance >= 0
+                        ? Colors.blue[50]
+                        : Colors.orange[50],
                     elevation: 4,
                     child: Container(
                       width: double.infinity,
@@ -296,16 +319,20 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                Icons.account_balance_wallet, 
-                                color: totalBalance >= 0 ? Colors.blue : Colors.orange, 
-                                size: 32
+                                Icons.account_balance_wallet,
+                                color: totalBalance >= 0
+                                    ? Colors.blue
+                                    : Colors.orange,
+                                size: 32,
                               ),
                               if (isLoadingSummary) ...[
                                 const SizedBox(width: 8),
                                 const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 ),
                               ],
                             ],
@@ -324,11 +351,15 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                             style: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.bold,
-                              color: totalBalance >= 0 ? Colors.blue : Colors.orange,
+                              color: totalBalance >= 0
+                                  ? Colors.blue
+                                  : Colors.orange,
                             ),
                           ),
                           // แสดงคำเตือนถ้าไม่ได้โหลด summary แบบเต็ม
-                          if (!isLoadingSummary && totalPages > 1 && transactions.isNotEmpty) ...[
+                          if (!isLoadingSummary &&
+                              totalPages > 1 &&
+                              transactions.isNotEmpty) ...[
                             const SizedBox(height: 8),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -353,9 +384,9 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                       ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   // Income and Expense Cards
                   Row(
                     children: [
@@ -369,8 +400,11 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.arrow_upward, 
-                                         color: Colors.green, size: 24),
+                                    Icon(
+                                      Icons.arrow_upward,
+                                      color: Colors.green,
+                                      size: 24,
+                                    ),
                                     if (isLoadingSummary) ...[
                                       const SizedBox(width: 4),
                                       const SizedBox(
@@ -385,13 +419,18 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                                   ],
                                 ),
                                 const SizedBox(height: 8),
-                                const Text('รายรับ', 
-                                     style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text('฿${totalIncome.toStringAsFixed(2)}',
-                                     style: const TextStyle(
-                                       fontSize: 16, 
-                                       color: Colors.green,
-                                       fontWeight: FontWeight.bold)),
+                                const Text(
+                                  'รายรับ',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  '฿${totalIncome.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -408,8 +447,11 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.arrow_downward, 
-                                         color: Colors.red, size: 24),
+                                    Icon(
+                                      Icons.arrow_downward,
+                                      color: Colors.red,
+                                      size: 24,
+                                    ),
                                     if (isLoadingSummary) ...[
                                       const SizedBox(width: 4),
                                       const SizedBox(
@@ -424,13 +466,18 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                                   ],
                                 ),
                                 const SizedBox(height: 8),
-                                const Text('รายจ่าย', 
-                                     style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text('฿${totalExpense.toStringAsFixed(2)}',
-                                     style: const TextStyle(
-                                       fontSize: 16, 
-                                       color: Colors.red,
-                                       fontWeight: FontWeight.bold)),
+                                const Text(
+                                  'รายจ่าย',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  '฿${totalExpense.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -438,9 +485,9 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                       ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 20),
-                  
+
                   // Quick Action Buttons
                   Row(
                     children: [
@@ -458,9 +505,9 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                       ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 20),
-                  
+
                   // Transactions Section
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -474,7 +521,10 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                       ),
                       if (totalPages > 1)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.grey[200],
                             borderRadius: BorderRadius.circular(16),
@@ -489,9 +539,9 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                         ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 12),
-                  
+
                   if (isLoading)
                     const Center(
                       child: Padding(
@@ -528,8 +578,11 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                         padding: const EdgeInsets.all(32.0),
                         child: Column(
                           children: [
-                            Icon(Icons.receipt_long, 
-                                 color: Colors.grey, size: 48),
+                            Icon(
+                              Icons.receipt_long,
+                              color: Colors.grey,
+                              size: 48,
+                            ),
                             const SizedBox(height: 16),
                             const Text(
                               'ยังไม่มีรายการธุรกรรม',
@@ -551,15 +604,17 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                     Column(
                       children: [
                         ...transactions.map((transaction) {
-                          final amount = (transaction['amount'] ?? 0).toDouble();
+                          final amount = (transaction['amount'] ?? 0)
+                              .toDouble();
                           final type = transaction['type'] ?? 0;
                           final isIncome = type == 1;
-                          
+
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: InkWell(
                               // TODO: เพิ่มการไปหน้า detail ในอนาคต
-                               onTap: () => _navigateToTransactionDetail(transaction),
+                              onTap: () =>
+                                  _navigateToTransactionDetail(transaction),
                               borderRadius: BorderRadius.circular(8),
                               child: Padding(
                                 padding: const EdgeInsets.all(16.0),
@@ -567,33 +622,39 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                                   children: [
                                     // Leading Icon
                                     CircleAvatar(
-                                      backgroundColor: isIncome 
-                                          ? Colors.green[100] 
+                                      backgroundColor: isIncome
+                                          ? Colors.green[100]
                                           : Colors.red[100],
                                       child: Icon(
-                                        isIncome 
-                                            ? Icons.arrow_upward 
+                                        isIncome
+                                            ? Icons.arrow_upward
                                             : Icons.arrow_downward,
-                                        color: isIncome ? Colors.green : Colors.red,
+                                        color: isIncome
+                                            ? Colors.green
+                                            : Colors.red,
                                       ),
                                     ),
                                     const SizedBox(width: 16),
-                                    
+
                                     // Content
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            transaction['name'] ?? 'ไม่ระบุชื่อ',
+                                            transaction['name'] ??
+                                                'ไม่ระบุชื่อ',
                                             style: const TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 16,
                                             ),
                                           ),
                                           const SizedBox(height: 4),
-                                          if (transaction['desc'] != null && 
-                                              transaction['desc'].toString().isNotEmpty) ...[
+                                          if (transaction['desc'] != null &&
+                                              transaction['desc']
+                                                  .toString()
+                                                  .isNotEmpty) ...[
                                             Text(
                                               transaction['desc'],
                                               style: TextStyle(
@@ -615,36 +676,43 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                                         ],
                                       ),
                                     ),
-                                    
+
                                     // Trailing Amount
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
                                       children: [
                                         Text(
                                           '${isIncome ? '+' : '-'}฿${amount.toStringAsFixed(2)}',
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,
-                                            color: isIncome ? Colors.green : Colors.red,
+                                            color: isIncome
+                                                ? Colors.green
+                                                : Colors.red,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
                                         Container(
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, 
+                                            horizontal: 6,
                                             vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: isIncome 
-                                                ? Colors.green.shade50 
+                                            color: isIncome
+                                                ? Colors.green.shade50
                                                 : Colors.red.shade50,
-                                            borderRadius: BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
                                           child: Text(
                                             isIncome ? 'รายรับ' : 'รายจ่าย',
                                             style: TextStyle(
                                               fontSize: 10,
-                                              color: isIncome ? Colors.green : Colors.red,
+                                              color: isIncome
+                                                  ? Colors.green
+                                                  : Colors.red,
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -657,11 +725,11 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                             ),
                           );
                         }).toList(),
-                        
+
                         const SizedBox(height: 16),
                       ],
                     ),
-                    
+
                   // Improved Pagination Controls
                   if (totalPages > 1 && !isLoading)
                     Container(
@@ -671,36 +739,38 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
                         children: [
                           // First Page Button
                           IconButton(
-                            onPressed: currentPage > 1 ? () => _changePage(1) : null,
+                            onPressed: currentPage > 1
+                                ? () => _changePage(1)
+                                : null,
                             icon: const Icon(Icons.first_page),
                             tooltip: 'หน้าแรก',
                           ),
-                          
+
                           // Previous Page Button
                           IconButton(
-                            onPressed: currentPage > 1 
+                            onPressed: currentPage > 1
                                 ? () => _changePage(currentPage - 1)
                                 : null,
                             icon: const Icon(Icons.chevron_left),
                             tooltip: 'หน้าก่อนหน้า',
                           ),
-                          
+
                           // Page Numbers
                           ..._buildPageNumbers(),
-                          
+
                           // Next Page Button
                           IconButton(
-                            onPressed: currentPage < totalPages 
+                            onPressed: currentPage < totalPages
                                 ? () => _changePage(currentPage + 1)
                                 : null,
                             icon: const Icon(Icons.chevron_right),
                             tooltip: 'หน้าถัดไป',
                           ),
-                          
+
                           // Last Page Button
                           IconButton(
-                            onPressed: currentPage < totalPages 
-                                ? () => _changePage(totalPages) 
+                            onPressed: currentPage < totalPages
+                                ? () => _changePage(totalPages)
                                 : null,
                             icon: const Icon(Icons.last_page),
                             tooltip: 'หน้าสุดท้าย',
@@ -716,46 +786,50 @@ void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
       ),
     );
   }
-  
+
   // ฟังก์ชันสร้างปุ่มหมายเลขหน้า
   List<Widget> _buildPageNumbers() {
     List<Widget> pageButtons = [];
     int startPage = (currentPage - 2).clamp(1, totalPages);
     int endPage = (currentPage + 2).clamp(1, totalPages);
-    
+
     // แสดงหน้าแรกและ ... ถ้าจำเป็น
     if (startPage > 1) {
       pageButtons.add(_buildPageButton(1));
       if (startPage > 2) {
-        pageButtons.add(const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4.0),
-          child: Text('...', style: TextStyle(color: Colors.grey)),
-        ));
+        pageButtons.add(
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: Text('...', style: TextStyle(color: Colors.grey)),
+          ),
+        );
       }
     }
-    
+
     // แสดงหน้าใกล้เคียง
     for (int i = startPage; i <= endPage; i++) {
       pageButtons.add(_buildPageButton(i));
     }
-    
+
     // แสดงหน้าสุดท้ายและ ... ถ้าจำเป็น
     if (endPage < totalPages) {
       if (endPage < totalPages - 1) {
-        pageButtons.add(const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4.0),
-          child: Text('...', style: TextStyle(color: Colors.grey)),
-        ));
+        pageButtons.add(
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: Text('...', style: TextStyle(color: Colors.grey)),
+          ),
+        );
       }
       pageButtons.add(_buildPageButton(totalPages));
     }
-    
+
     return pageButtons;
   }
-  
+
   Widget _buildPageButton(int pageNumber) {
     bool isCurrentPage = pageNumber == currentPage;
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 2),
       child: Material(
