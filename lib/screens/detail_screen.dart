@@ -94,8 +94,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
 
     return WillPopScope(
       onWillPop: () async {
-        // ส่งสัญญาณกลับ Home ว่ามีการแก้ไข
-        Navigator.pop(context, 'edited');
+        Navigator.pop(context, 'edited'); // ส่งกลับค่า edited
         return false;
       },
       child: Scaffold(
@@ -275,6 +274,46 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                   content: isIncome ? 'รายรับ' : 'รายจ่าย',
                                   delay: 500,
                                   contentColor: isIncome ? Colors.green : Colors.red,
+                                ),
+                                const SizedBox(height: 32),
+                                // ปุ่มกลับหน้า Home
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [Colors.blue.shade600, Colors.blue.shade400],
+                                          ),
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.blue.withOpacity(0.3),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: ElevatedButton.icon(
+                                          onPressed: () => Navigator.pop(context, 'edited'),
+                                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                                          label: const Text(
+                                            'กลับหน้าแรก',
+                                            style: TextStyle(
+                                                color: Colors.white, fontWeight: FontWeight.bold),
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            shadowColor: Colors.transparent,
+                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
