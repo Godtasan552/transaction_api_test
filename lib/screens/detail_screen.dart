@@ -1,11 +1,22 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:form_validate/utils/api.dart';
+import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
 import 'edit_transaction.dart'; // import หน้าแก้ไข
+import '../services/universal_storage.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
   final Map<String, dynamic> transaction;
+  final Function(Map<String, dynamic>)? onEdit;
+  final Function(String)? onDelete; // เพิ่ม callback สำหรับการลบ
 
-  const TransactionDetailScreen({super.key, required this.transaction});
+  const TransactionDetailScreen({
+    super.key, 
+    required this.transaction,
+    this.onEdit,
+    this.onDelete, // รับ onDelete เข้ามาใน constructor
+  });
 
   @override
   State<TransactionDetailScreen> createState() => _TransactionDetailScreenState();
@@ -50,6 +61,252 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
     _animationController.dispose();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  // ฟังก์ชันสำหรับแสดง Dialog ยืนยันการลบ
+  Future<void> _showDeleteConfirmationDialog() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false, // ป้องกันการปิด dialog โดยการแตะด้านนอก
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.orange,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'ยืนยันการลบ',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'คุณต้องการลบรายการธุรกรรมนี้หรือไม่?',
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.transaction['name'] ?? 'ไม่ระบุชื่อ',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'จำนวน: ${(widget.transaction['type'] == 1 ? '+' : '-')}฿${(widget.transaction['amount'] ?? 0).toDouble().toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: widget.transaction['type'] == 1 ? Colors.green : Colors.red,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (widget.transaction['date'] != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'วันที่: ${widget.transaction['date']}',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'การดำเนินการนี้ไม่สามารถยกเลิกได้',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 14,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text(
+                'ยกเลิก',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'ลบ',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _deleteTransaction();
+    }
+  }
+
+  // ฟังก์ชันลบธุรกรรมผ่าน API
+  Future<void> _deleteTransaction() async {
+    try {
+      // แสดง loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('กำลังลบรายการ...'),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+
+      await UniversalStorageService.init();
+      final token = UniversalStorageService.getToken();
+
+      if (token == null || token.isEmpty) {
+        Navigator.of(context).pop(); // ปิด loading dialog
+        _showErrorSnackBar('กรุณาเข้าสู่ระบบใหม่');
+        return;
+      }
+
+      // สร้าง URL สำหรับลบธุรกรรม (ใช้ uuid หรือ id ของธุรกรรม)
+      final transactionId = widget.transaction['uuid'] ?? widget.transaction['id'];
+      if (transactionId == null) {
+        Navigator.of(context).pop(); // ปิด loading dialog
+        _showErrorSnackBar('ไม่พบรหัสธุรกรรม');
+        return;
+      }
+
+      // แก้ไข URL ให้เรียบร้อย
+      final url = Uri.parse('$BASE_URL$DELETE_TRANSACTION_ENDPOINT$transactionId');
+
+      final response = await http.delete(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('การลบใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้ง');
+        },
+      );
+
+      Navigator.of(context).pop(); // ปิด loading dialog
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        // ลบสำเร็จ
+        _showSuccessSnackBar('ลบรายการสำเร็จ');
+        
+        // เรียก callback ถ้ามี
+        if (widget.onDelete != null) {
+          widget.onDelete!(transactionId.toString());
+        }
+        
+        // กลับไปหน้า home พร้อมส่งสัญญาณว่ามีการลบ
+        Navigator.of(context).pop('deleted');
+        
+      } else if (response.statusCode == 401) {
+        _showErrorSnackBar('กรุณาเข้าสู่ระบบใหม่');
+      } else if (response.statusCode == 404) {
+        _showErrorSnackBar('ไม่พบรายการที่ต้องการลบ');
+      } else {
+        final errorData = jsonDecode(response.body);
+        final errorMessage = errorData['message'] ?? 'เกิดข้อผิดพลาดในการลบรายการ';
+        _showErrorSnackBar(errorMessage);
+      }
+    } catch (e) {
+      Navigator.of(context).pop(); // ปิด loading dialog ในกรณีเกิด error
+      _showErrorSnackBar('เกิดข้อผิดพลาด: ${e.toString()}');
+    }
+  }
+
+  // ฟังก์ชันแสดง Success SnackBar
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: 12),
+            Text(message),
+          ],
+        ),
+        backgroundColor: Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ฟังก์ชันแสดง Error SnackBar
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.red.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   // ฟังก์ชันไปหน้า Edit
@@ -161,6 +418,18 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                           icon: const Icon(Icons.edit, color: Colors.white),
                           onPressed: _navigateToEditScreen,
                           tooltip: 'แก้ไข',
+                        ),
+                      ),
+                      // ปุ่ม Delete (ใหม่)
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.white),
+                          onPressed: _showDeleteConfirmationDialog,
+                          tooltip: 'ลบรายการ',
                         ),
                       ),
                     ],
