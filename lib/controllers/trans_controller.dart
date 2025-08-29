@@ -285,7 +285,7 @@ class TransactionController extends GetxController {
       // บันทึกลง local storage
       await _saveTransactionsToLocal();
 
-      // TODO: เรียก API เพื่อลบจากเซิร์ฟเวอร์
+      
       // await _deleteTransactionFromAPI(uuid);
 
       NavigationHelper.showSuccessSnackBar('ลบธุรกรรมสำเร็จ');
@@ -299,6 +299,50 @@ class TransactionController extends GetxController {
       _setLoading(false);
     }
   }
+
+  // ==================== EDIT ====================
+  // ฟังก์ชันอัปเดตธุรกรรมใน API
+Future<bool> editTransactionAPI(Transaction transaction) async {
+  try {
+    final token = UniversalStorageService.getToken();
+    if (token == null) {
+      NavigationHelper.showErrorSnackBar('กรุณาเข้าสู่ระบบก่อน');
+      return false;
+    }
+
+    final serviceUrl = '$BASE_URL$UPDATE_TRANSACTION_ENDPOINT/${transaction.uuid}';
+    final response = await http.put(
+      Uri.parse(serviceUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(transaction.toApiJson()),
+    );
+    print(serviceUrl);
+    debugPrint('Edit transaction response: ${response.statusCode}');
+
+    if (response.statusCode == 200) {
+      // อัปเดต local ด้วย
+      final index = _transactions.indexWhere((t) => t.uuid == transaction.uuid);
+      if (index != -1) {
+        _transactions[index] = transaction;
+        await _saveTransactionsToLocal();
+      }
+
+      NavigationHelper.showSuccessSnackBar('แก้ไขธุรกรรมสำเร็จ');
+      return true;
+    } else {
+      NavigationHelper.showErrorSnackBar('ไม่สามารถแก้ไขธุรกรรมได้');
+      return false;
+    }
+  } catch (e) {
+    debugPrint('Error editing transaction: $e');
+    NavigationHelper.showErrorSnackBar('เกิดข้อผิดพลาด: ${e.toString()}');
+    return false;
+  }
+}
+
 
   // ==================== SEARCH & FILTER ====================
 

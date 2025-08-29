@@ -63,7 +63,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => edit_transaction_page(transaction: widget.transaction),
+        builder: (context) => EditTransactionPage(transaction: widget.transaction),
       ),
     );
 

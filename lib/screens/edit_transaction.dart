@@ -1,31 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:get/get.dart';
+import '../controllers/trans_controller.dart';
+import '../utils/navigation_helper.dart';
+import 'package:uuid/uuid.dart';
 
-class edit_transaction_page extends StatefulWidget {
+
+class EditTransactionPage extends StatefulWidget {
   final Map<String, dynamic> transaction;
 
-  const edit_transaction_page({super.key, required this.transaction});
+  const EditTransactionPage({super.key, required this.transaction});
 
   @override
-  State<edit_transaction_page> createState() => _edit_transaction_pageState();
+  State<EditTransactionPage> createState() => _EditTransactionPageState();
 }
 
-class _edit_transaction_pageState extends State<edit_transaction_page> {
+class _EditTransactionPageState extends State<EditTransactionPage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
   late TextEditingController _amountController;
   late DateTime _selectedDate;
-  late String _selectedCategory;
 
-  final List<String> _categories = ["อาหาร", "เดินทาง", "บิล", "ช้อปปิ้ง", "อื่นๆ"];
+  late TransactionController _controller;
+
+  // เก็บ type: 1 = รายรับ, -1 = รายจ่าย
+  int _selectedType = 1;
+  List<bool> _typeSelected = [true, false]; // [รายรับ, รายจ่าย]
 
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(text: widget.transaction['name']);
-    _amountController =
-        TextEditingController(text: widget.transaction['amount'].toString());
 
+    // หา controller จาก Get ถ้ามี ถ้าไม่มี fallback เป็น instance ใหม่
+    try {
+      _controller = Get.find<TransactionController>();
+    } catch (e) {
+      _controller = TransactionController();
+    }
+
+    _titleController = TextEditingController(text: widget.transaction['name']);
+    _amountController = TextEditingController(
+      text: widget.transaction['amount'].toString(),
+    );
+
+    // date
     final rawDate = widget.transaction['date'];
     if (rawDate is DateTime) {
       _selectedDate = rawDate;
@@ -39,7 +57,16 @@ class _edit_transaction_pageState extends State<edit_transaction_page> {
       _selectedDate = DateTime.now();
     }
 
-    _selectedCategory = widget.transaction['category'] ?? _categories.first;
+    // type (safely parse)
+    final rawType = widget.transaction['type'];
+    if (rawType is int) {
+      _selectedType = rawType;
+    } else if (rawType is String) {
+      final parsed = int.tryParse(rawType);
+      if (parsed != null) _selectedType = parsed;
+    }
+    // update UI selection array
+    _typeSelected = [_selectedType == 1, _selectedType == -1];
   }
 
   @override
@@ -57,23 +84,34 @@ class _edit_transaction_pageState extends State<edit_transaction_page> {
       lastDate: DateTime(2100),
     );
     if (pickedDate != null) {
-      setState(() {
-        _selectedDate = pickedDate;
-      });
+      setState(() => _selectedDate = pickedDate);
     }
   }
 
-  void _saveTransaction() {
-    if (_formKey.currentState!.validate()) {
-      final updatedTransaction = {
-        ...widget.transaction,
-        "name": _titleController.text,
-        "amount": double.parse(_amountController.text),
-        "date": _selectedDate.toIso8601String(),
-        "category": _selectedCategory,
-      };
+  Future<void> _saveTransaction() async {
+    if (!_formKey.currentState!.validate()) return;
 
-      Navigator.pop(context, updatedTransaction);
+    // สร้าง Transaction object โดยใช้ type ที่เลือก
+    final updatedTransaction = Transaction(
+      uuid: widget.transaction['uuid'],
+      wallet: widget.transaction['wallet'] ?? 'default',
+      name: _titleController.text,
+      desc: widget.transaction['desc'],
+      amount: double.parse(_amountController.text),
+      type: _selectedType,
+      date: _selectedDate,
+      createdAt: widget.transaction['createdAt'] != null
+          ? DateTime.parse(widget.transaction['createdAt'])
+          : DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    final success = await _controller.editTransactionAPI(updatedTransaction);
+
+    if (success) {
+      Navigator.pop(context, updatedTransaction.toJson());
+    } else {
+      NavigationHelper.showErrorSnackBar("ไม่สามารถแก้ไขธุรกรรมได้");
     }
   }
 
@@ -100,6 +138,7 @@ class _edit_transaction_pageState extends State<edit_transaction_page> {
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 children: [
+                  // ชื่อรายการ
                   TextFormField(
                     controller: _titleController,
                     decoration: InputDecoration(
@@ -109,35 +148,88 @@ class _edit_transaction_pageState extends State<edit_transaction_page> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    validator: (value) =>
-                        (value == null || value.isEmpty) ? "กรุณากรอกชื่อรายการ" : null,
+                    validator: (value) => (value == null || value.isEmpty)
+                        ? "กรุณากรอกชื่อรายการ"
+                        : null,
                   ),
                   const SizedBox(height: 20),
+
+                  // จำนวนเงิน
                   TextFormField(
                     controller: _amountController,
                     decoration: InputDecoration(
                       labelText: "จำนวนเงิน",
-                      prefixIcon: const Icon(Icons.attach_money, color: Colors.teal),
+                      prefixIcon: const Icon(
+                        Icons.attach_money,
+                        color: Colors.teal,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) return "กรุณากรอกจำนวนเงิน";
+                      if (value == null || value.isEmpty)
+                        return "กรุณากรอกจำนวนเงิน";
                       if (double.tryParse(value) == null) {
                         return "กรุณากรอกตัวเลขที่ถูกต้อง";
                       }
                       return null;
                     },
                   ),
+                  const SizedBox(height: 16),
+
+                  // เลือกประเภท (type)
+                  Row(
+                    children: [
+                      const Text("ประเภท: "),
+                      const SizedBox(width: 12),
+                      ToggleButtons(
+                        isSelected: _typeSelected,
+                        onPressed: (index) {
+                          setState(() {
+                            _selectedType = (index == 0)
+                                ? 1
+                                : -1; // เก็บค่าประเภท
+                            _typeSelected = [
+                              index == 0,
+                              index == 1,
+                            ]; // อัพเดตปุ่ม Toggle
+                          });
+                        },
+
+                        borderRadius: BorderRadius.circular(8),
+                        constraints: const BoxConstraints(
+                          minHeight: 36,
+                          minWidth: 100,
+                        ),
+                        children: const [
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Text('รายรับ'),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Text('รายจ่าย'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
                   const SizedBox(height: 20),
+
+                  // วันที่
                   InkWell(
                     onTap: _pickDate,
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          vertical: 14, horizontal: 12),
+                        vertical: 14,
+                        horizontal: 12,
+                      ),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.teal, width: 1.2),
                         borderRadius: BorderRadius.circular(12),
@@ -157,34 +249,10 @@ class _edit_transaction_pageState extends State<edit_transaction_page> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  DropdownButtonFormField<String>(
-                    value: _selectedCategory,
-                    items: _categories
-                        .map((cat) => DropdownMenuItem(
-                              value: cat,
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.category, color: Colors.teal),
-                                  const SizedBox(width: 10),
-                                  Text(cat),
-                                ],
-                              ),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedCategory = value!;
-                      });
-                    },
-                    decoration: InputDecoration(
-                      labelText: "หมวดหมู่",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
+
                   const SizedBox(height: 30),
+
+                  // ปุ่มบันทึก
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -203,7 +271,7 @@ class _edit_transaction_pageState extends State<edit_transaction_page> {
                         style: TextStyle(fontSize: 18, color: Colors.white),
                       ),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
