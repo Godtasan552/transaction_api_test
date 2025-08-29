@@ -59,36 +59,42 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
 
 
   // ฟังก์ชันนำทางไปหน้าแก้ไขยังคงอยู่
-  void _navigateToEditScreen() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EditTransactionPage(transaction: widget.transaction),
+void _navigateToEditScreen() async {
+  final updatedTransaction = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => EditTransactionPage(transaction: widget.transaction),
+    ),
+  );
+
+  if (updatedTransaction != null) {
+    setState(() {
+      // อัปเดต transaction ของหน้า detail
+      widget.transaction['name'] = updatedTransaction['name'];
+      widget.transaction['desc'] = updatedTransaction['desc'];
+      widget.transaction['amount'] = updatedTransaction['amount'];
+      widget.transaction['type'] = updatedTransaction['type'];
+      widget.transaction['date'] = updatedTransaction['date'];
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: const [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text('แก้ไขรายการเรียบร้อยแล้ว'),
+          ],
+        ),
+        backgroundColor: Colors.blue.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
       ),
     );
-
-    if (result == 'edited') {
-      if (widget.onEdit != null) {
-        // await widget.onEdit!(editedTransactionData);
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: const [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 12),
-              Text('แก้ไขรายการเรียบร้อยแล้ว'),
-            ],
-          ),
-          backgroundColor: Colors.blue.shade600,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-      Navigator.pop(context, 'edited'); 
-    }
   }
+}
+
 
   @override
   Widget build(BuildContext context) {
