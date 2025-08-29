@@ -36,9 +36,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadInitialData();
   }
 
-  void _navigateToTransactionDetail(Map<String, dynamic> transaction) {
-  Get.to(() => TransactionDetailScreen(transaction: transaction));
+void _navigateToTransactionDetail(Map<String, dynamic> transaction) async {
+  final result = await Get.to(() => TransactionDetailScreen(transaction: transaction));
+  if (result == 'edited') {
+    _loadInitialData(); // รีเฟรช Home ตอนผู้ใช้กด back ออกจาก Detail
+  }
 }
+
 
 
   // โหลดข้อมูลเริ่มต้น
