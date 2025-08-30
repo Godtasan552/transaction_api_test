@@ -19,6 +19,7 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
   late TextEditingController _amountController;
+  late TextEditingController _descController; // เพิ่ม controller สำหรับ desc
   late DateTime _selectedDate;
 
   late TransactionController _controller;
@@ -41,6 +42,10 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
     _titleController = TextEditingController(text: widget.transaction['name']);
     _amountController = TextEditingController(
       text: widget.transaction['amount'].toString(),
+    );
+    // เพิ่ม controller สำหรับ desc
+    _descController = TextEditingController(
+      text: widget.transaction['desc'] ?? '',
     );
 
     // date
@@ -73,6 +78,7 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
   void dispose() {
     _titleController.dispose();
     _amountController.dispose();
+    _descController.dispose(); // เพิ่ม dispose สำหรับ desc controller
     super.dispose();
   }
 
@@ -96,7 +102,7 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
       uuid: widget.transaction['uuid'],
       wallet: widget.transaction['wallet'] ?? 'default',
       name: _titleController.text,
-      desc: widget.transaction['desc'],
+      desc: _descController.text.isEmpty ? null : _descController.text, // ใช้ desc จาก controller
       amount: double.parse(_amountController.text),
       type: _selectedType,
       date: _selectedDate,
@@ -151,6 +157,21 @@ class _EditTransactionPageState extends State<EditTransactionPage> {
                     validator: (value) => (value == null || value.isEmpty)
                         ? "กรุณากรอกชื่อรายการ"
                         : null,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // รายละเอียด (เพิ่มใหม่)
+                  TextFormField(
+                    controller: _descController,
+                    decoration: InputDecoration(
+                      labelText: "รายละเอียด (ไม่บังคับ)",
+                      prefixIcon: const Icon(Icons.description, color: Colors.teal),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    maxLines: 3,
+                    textInputAction: TextInputAction.newline,
                   ),
                   const SizedBox(height: 20),
 
